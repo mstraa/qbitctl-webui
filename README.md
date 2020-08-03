@@ -1,4 +1,4 @@
-#React Boiler Plate for Custom qBitTorrent WebUI
+# React Boiler Plate for Custom qBitTorrent WebUI
 
 This project is a very simple and barebones boilerplate for creating a custom WebUI for qBitTorrent with React.
 
@@ -16,10 +16,10 @@ As usual, just clone this repo, run
 
 ## Considerations
 
-####Build command builds to /build/public
+#### Build command builds to /build/public
 The reason for this is so that you can use the entire build folder as your WebUI theme folder. 
 
-###Authentication
+### Authentication
 qBitTorrent's WebUI authenticates and throws the user around between public/private folder. In react, we don't need to do that. You can keep your app a single page application and introduce a 'softer' authentication
 
 ### Package.json
