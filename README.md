@@ -35,7 +35,7 @@ Dark, terminal-inspired qBittorrent WebUI built with React. The interface keeps 
 2. Unzip it somewhere qBittorrent can read, for example:
 
    ```bash
-   unzip qbitctl-1.0.3.zip -d /opt/qbittorrent-webuis
+   unzip qbitctl-1.0.4.zip -d /opt/qbittorrent-webuis
    ```
 
 3. In qBittorrent, open `Tools -> Options -> Web UI`.

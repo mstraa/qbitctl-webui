@@ -127,6 +127,8 @@ const DEFAULT_SETTINGS = {
   temp_path_enabled: false,
   temp_path: '/data/incomplete',
   ui_accent_color: '#f07b24',
+  ui_show_category_filters: true,
+  ui_show_tag_filters: true,
   ui_show_ratio_progress: true,
   ui_table_density: 'normal',
 };
@@ -148,6 +150,7 @@ function App() {
   const [primaryHash, setPrimaryHash] = useState('');
   const [lastClickedHash, setLastClickedHash] = useState('');
   const [activeFilter, setActiveFilter] = useState('all');
+  const [categoryFilter, setCategoryFilter] = useState('');
   const [tagFilter, setTagFilter] = useState('');
   const [query, setQuery] = useState('');
   const [sort, setSort] = useState({ key: 'name', direction: 'asc' });
@@ -161,6 +164,7 @@ function App() {
   const [addOpen, setAddOpen] = useState(false);
   const [addMagnet, setAddMagnet] = useState('');
   const [addFile, setAddFile] = useState(null);
+  const [addPaused, setAddPaused] = useState(false);
   const [addNotice, setAddNotice] = useState('');
   const [settings, setSettings] = useState(DEFAULT_SETTINGS);
   const [notice, setNotice] = useState('');
@@ -348,6 +352,16 @@ function App() {
     return Array.from(found).sort((a, b) => a.localeCompare(b));
   }, [torrents]);
 
+  const categories = useMemo(() => {
+    const found = new Set();
+    torrents.forEach(torrent => {
+      if (torrent.category) {
+        found.add(torrent.category);
+      }
+    });
+    return Array.from(found).sort((a, b) => a.localeCompare(b));
+  }, [torrents]);
+
   const filteredTorrents = useMemo(() => {
     return torrents.filter(torrent => {
       const matchesFilter =
@@ -357,11 +371,12 @@ function App() {
         (activeFilter === 'seeding' && isSeeding(torrent.state)) ||
         (activeFilter === 'paused' && isPaused(torrent.state)) ||
         (activeFilter === 'stalled' && isStalled(torrent.state));
+      const matchesCategory = !categoryFilter || torrent.category === categoryFilter;
       const matchesTag = !tagFilter || parseTags(torrent.tags).includes(tagFilter);
       const matchesQuery = searchableTorrentText(torrent).includes(query.trim().toLowerCase());
-      return matchesFilter && matchesTag && matchesQuery;
+      return matchesFilter && matchesCategory && matchesTag && matchesQuery;
     });
-  }, [activeFilter, query, tagFilter, torrents]);
+  }, [activeFilter, categoryFilter, query, tagFilter, torrents]);
 
   const visibleTorrents = useMemo(() => {
     const next = filteredTorrents.slice();
@@ -449,6 +464,7 @@ function App() {
       resume: '/api/v2/torrents/resume',
       pause: '/api/v2/torrents/pause',
       delete: '/api/v2/torrents/delete',
+      recheck: '/api/v2/torrents/recheck',
     };
 
     if (status !== 'live') {
@@ -479,6 +495,7 @@ function App() {
     setAddOpen(false);
     setAddMagnet('');
     setAddFile(null);
+    setAddPaused(false);
     setAddNotice('');
   }
 
@@ -500,6 +517,10 @@ function App() {
     }
     if (addFile) {
       body.append('torrents', addFile, addFile.name);
+    }
+    if (addPaused) {
+      body.append('stopped', 'true');
+      body.append('paused', 'true');
     }
 
     fetch('/api/v2/torrents/add', {
@@ -652,8 +673,34 @@ function App() {
           ))}
         </nav>
 
-        {tags.length > 0 && (
+        {settings.ui_show_category_filters && categories.length > 0 && (
+          <nav className="filter-list side-filter" aria-label="Category filters">
+            <span className="sidebar-label">categories</span>
+            <button
+              className={!categoryFilter ? 'active' : ''}
+              onClick={() => setCategoryFilter('')}
+              type="button"
+            >
+              <span>All categories</span>
+              <strong>{torrents.length}</strong>
+            </button>
+            {categories.map(category => (
+              <button
+                className={category === categoryFilter ? 'active' : ''}
+                key={category}
+                onClick={() => setCategoryFilter(category)}
+                type="button"
+              >
+                <span>{category}</span>
+                <strong>{torrents.filter(torrent => torrent.category === category).length}</strong>
+              </button>
+            ))}
+          </nav>
+        )}
+
+        {settings.ui_show_tag_filters && tags.length > 0 && (
           <nav className="filter-list tags-filter" aria-label="Tag filters">
+            <span className="sidebar-label">tags</span>
             <button
               className={!tagFilter ? 'active' : ''}
               onClick={() => setTagFilter('')}
@@ -711,6 +758,7 @@ function App() {
             <button className="add-button" onClick={openAddModal} type="button">ADD</button>
             <button onClick={() => handleAction('resume')} type="button">Resume</button>
             <button onClick={() => handleAction('pause')} type="button">Pause</button>
+            <button onClick={() => handleAction('recheck')} type="button">Recheck</button>
             <button className="danger" onClick={() => handleAction('delete')} type="button">Remove</button>
             <button
               aria-label="Settings"
@@ -813,7 +861,9 @@ function App() {
           onClose={closeAddModal}
           onFile={setAddFile}
           onMagnet={setAddMagnet}
+          onPaused={setAddPaused}
           onSubmit={addTorrent}
+          paused={addPaused}
           status={status}
         />
       )}
@@ -832,7 +882,7 @@ function App() {
   );
 }
 
-function AddTorrentModal({ file, magnet, notice, onClose, onFile, onMagnet, onSubmit, status }) {
+function AddTorrentModal({ file, magnet, notice, onClose, onFile, onMagnet, onPaused, onSubmit, paused, status }) {
   return (
     <div className="settings-overlay tag-overlay" role="dialog" aria-modal="true" aria-labelledby="add-title">
       <section className="tag-modal add-modal">
@@ -862,8 +912,12 @@ function AddTorrentModal({ file, magnet, notice, onClose, onFile, onMagnet, onSu
               value={magnet}
             />
           </label>
+          <label className="setting-row wide">
+            <span>Add paused</span>
+            <input checked={paused} onChange={event => onPaused(event.target.checked)} type="checkbox" />
+          </label>
           <p className="settings-hint">
-            Current mode: {status}. You can upload a .torrent file, paste one or more magnet links/URLs, or provide both.
+            Current mode: {status}. Enable Add paused when importing your own data, then recheck it before resuming.
           </p>
         </div>
         <footer className="settings-footer">
@@ -1090,6 +1144,14 @@ function SettingsPanel({ notice, onClose, onRevert, onSave, onUpdate, settings, 
             <label className="setting-row">
               <span>Ratio progress bar</span>
               <input checked={Boolean(settings.ui_show_ratio_progress)} onChange={event => onUpdate('ui_show_ratio_progress', event.target.checked)} type="checkbox" />
+            </label>
+            <label className="setting-row">
+              <span>Category filters</span>
+              <input checked={settings.ui_show_category_filters !== false} onChange={event => onUpdate('ui_show_category_filters', event.target.checked)} type="checkbox" />
+            </label>
+            <label className="setting-row">
+              <span>Tag filters</span>
+              <input checked={settings.ui_show_tag_filters !== false} onChange={event => onUpdate('ui_show_tag_filters', event.target.checked)} type="checkbox" />
             </label>
             <label className="setting-row wide">
               <span>Table density</span>

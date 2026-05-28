@@ -178,6 +178,7 @@ button {
   gap: 6px;
 }
 
+.side-filter,
 .tags-filter {
   flex: 0 1 auto;
   min-height: 0;
