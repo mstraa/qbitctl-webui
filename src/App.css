@@ -371,6 +371,12 @@ dd {
   white-space: nowrap;
 }
 
+.speed-value {
+  display: inline-flex;
+  align-items: baseline;
+  gap: 4px;
+}
+
 .stats-panel small {
   display: block;
   margin-top: 6px;
@@ -379,6 +385,14 @@ dd {
   font-size: 11px;
   text-align: left;
   white-space: nowrap;
+}
+
+.stats-panel .speed-value small {
+  display: inline;
+  margin-top: 0;
+  color: var(--text);
+  font-size: 0.72em;
+  text-align: left;
 }
 
 .workspace {

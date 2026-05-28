@@ -1,4 +1,4 @@
-import React, { useEffect, useMemo, useRef, useState } from 'react';
+import React, { useEffect, useMemo, useState } from 'react';
 import './App.css';
 
 const SAMPLE_TORRENTS = [
@@ -167,7 +167,6 @@ function App() {
   const [selectedMeta, setSelectedMeta] = useState({});
   const [tagEditorOpen, setTagEditorOpen] = useState(false);
   const [tagDraft, setTagDraft] = useState('');
-  const autoSelectedRef = useRef(false);
 
   const selectedTorrent = primaryHash
     ? torrents.find(torrent => torrent.hash === primaryHash)
@@ -189,11 +188,6 @@ function App() {
         setTorrents(nextTorrents);
         setStatus('live');
         setLastSync(new Date().toLocaleTimeString());
-        if (!autoSelectedRef.current && !primaryHash && nextTorrents.length) {
-          autoSelectedRef.current = true;
-          setPrimaryHash(nextTorrents[0].hash);
-          setSelectedHashes([nextTorrents[0].hash]);
-        }
       } catch (error) {
         if (!isMounted) {
           return;
@@ -201,11 +195,6 @@ function App() {
         setTorrents(SAMPLE_TORRENTS);
         setStatus('preview');
         setLastSync(new Date().toLocaleTimeString());
-        if (!autoSelectedRef.current && !primaryHash) {
-          autoSelectedRef.current = true;
-          setPrimaryHash(SAMPLE_TORRENTS[0].hash);
-          setSelectedHashes([SAMPLE_TORRENTS[0].hash]);
-        }
       }
     }
 
@@ -335,12 +324,16 @@ function App() {
       fetch(`/api/v2/torrents/files?hash=${hash}`, { credentials: 'same-origin' })
         .then(response => (response.ok ? response.json() : []))
         .catch(() => []),
-    ]).then(([properties, trackers, files]) => {
+      fetch(`/api/v2/sync/torrentPeers?hash=${hash}&rid=0`, { credentials: 'same-origin' })
+        .then(response => (response.ok ? response.json() : {}))
+        .catch(() => ({})),
+    ]).then(([properties, trackers, files, peers]) => {
       if (!cancelled) {
         setSelectedMeta({
           properties,
-          trackers: trackers.map(tracker => tracker.url || tracker.msg || tracker.tier).filter(Boolean),
+          trackers,
           files,
+          peers: peers.peers || {},
         });
       }
     });
@@ -689,17 +682,17 @@ function App() {
             <dl>
               <div>
                 <dt>up</dt>
-                <dd>{formatSpeed(totals.upspeed)}</dd>
+                <dd><SpeedValue bytes={totals.upspeed} /></dd>
                 <small>{formatBytes(totals.uploaded)}</small>
               </div>
               <div>
                 <dt>down</dt>
-                <dd>{formatSpeed(totals.dlspeed)}</dd>
+                <dd><SpeedValue bytes={totals.dlspeed} /></dd>
                 <small>{formatBytes(totals.downloaded)}</small>
               </div>
             </dl>
             <div className="session-lines">
-              <span>External IP</span>
+              <span>IP</span>
               <strong>{sessionInfo.externalIp || 'unknown'}</strong>
               <span>Free space</span>
               <strong>{sessionInfo.freeSpace == null ? 'unknown' : formatBytes(sessionInfo.freeSpace)}</strong>
@@ -897,6 +890,16 @@ function ProgressBar({ value, large }) {
   );
 }
 
+function SpeedValue({ bytes }) {
+  const [value, unit = 'B'] = formatBytes(bytes).split(' ');
+  return (
+    <span className="speed-value">
+      <span>{value}</span>
+      <small>{unit}/s</small>
+    </span>
+  );
+}
+
 function SpeedHistoryGraph({ history }) {
   const max = Math.max(
     1,
@@ -941,7 +944,7 @@ function SelectedPanel({ meta, onClose, onEditTags, selectedCount, torrent }) {
         <Detail label="Total size" value={formatBytes(torrent.size)} />
         <Detail label="Uploaded" value={formatBytes(torrent.uploaded)} />
         <Detail label="Ratio" value={formatRatio(torrent.ratio)} />
-        <Detail label="Seeds / Peers" value={`${torrent.num_seeds} / ${torrent.num_leechs}`} />
+        <Detail label="Seeds / Peers" value={formatSeedPeerCount(torrent)} />
         <Detail label="Down speed" value={formatSpeed(torrent.dlspeed)} />
         <Detail label="Up speed" value={formatSpeed(torrent.upspeed)} />
         <Detail label="Added" value={formatTimestamp(torrent.added_on)} />
@@ -959,7 +962,8 @@ function SelectedPanel({ meta, onClose, onEditTags, selectedCount, torrent }) {
         <code>{parseTags(torrent.tags).join(', ') || 'add tags'}</code>
       </button>
 
-      <DetailList title="Trackers" items={getTrackers(torrent, meta).map(item => [item, 'ok'])} />
+      <DetailList title="Trackers" items={getTrackers(torrent, meta)} />
+      <DetailList title="Peers" items={getPeers(meta)} />
       <DetailList title="Files" items={getFiles(torrent, meta).map(file => [file.name, formatBytes(file.size)])} />
     </>
   );
@@ -1283,6 +1287,20 @@ function formatSpeed(bytes) {
   return `${formatBytes(bytes)}/s`;
 }
 
+function formatPercent(value) {
+  return `${Math.round(Number(value || 0) * 100)}%`;
+}
+
+function formatSeedPeerCount(torrent) {
+  const seeds = Number.isFinite(torrent.num_complete)
+    ? torrent.num_complete
+    : torrent.num_seeds;
+  const peers = Number.isFinite(torrent.num_incomplete)
+    ? torrent.num_incomplete
+    : torrent.num_leechs;
+  return `${seeds || 0} / ${peers || 0}`;
+}
+
 function formatDateShort(seconds) {
   if (!seconds) return '--';
   return new Date(seconds * 1000).toLocaleDateString();
@@ -1294,12 +1312,63 @@ function formatTimestamp(seconds) {
 }
 
 function getPreviewMeta(torrent) {
-  return { properties: {}, trackers: torrent.trackers || [], files: torrent.files || [] };
+  return { properties: {}, trackers: torrent.trackers || [], files: torrent.files || [], peers: {} };
 }
 
 function getTrackers(torrent, meta) {
   const trackers = meta.trackers && meta.trackers.length ? meta.trackers : torrent.trackers;
-  return trackers && trackers.length ? trackers : ['No trackers reported'];
+  const normalized = (trackers || [])
+    .map(tracker => normalizeTracker(tracker))
+    .filter(tracker => tracker.url);
+  const visibleTrackers = torrent.private
+    ? normalized.filter(tracker => !isLocalDiscoveryTracker(tracker.url))
+    : normalized;
+
+  if (!visibleTrackers.length) {
+    return [['No trackers reported', '--']];
+  }
+
+  return visibleTrackers.map(tracker => [
+    tracker.url,
+    trackerStatusLabel(tracker),
+  ]);
+}
+
+function normalizeTracker(tracker) {
+  if (typeof tracker === 'string') {
+    return { url: tracker, msg: '', status: null };
+  }
+  return {
+    url: tracker.url || tracker.msg || '',
+    msg: tracker.msg || '',
+    status: tracker.status,
+  };
+}
+
+function isLocalDiscoveryTracker(url) {
+  return /\*\* \[(DHT|PeX|LSD)\] \*\*/i.test(url);
+}
+
+function trackerStatusLabel(tracker) {
+  if (tracker.msg && tracker.status !== 2) {
+    return tracker.msg;
+  }
+  const labels = {
+    0: 'disabled',
+    1: 'not contacted',
+    2: 'working',
+    3: 'updating',
+    4: 'not working',
+  };
+  return labels[tracker.status] || 'tracker';
+}
+
+function getPeers(meta) {
+  const peers = Object.entries(meta.peers || {}).map(([address, peer]) => {
+    const ip = peer.ip || address.split(':').slice(0, -1).join(':') || address;
+    return [ip, formatPercent(peer.progress)];
+  });
+  return peers.length ? peers : [['No peers reported', '--']];
 }
 
 function getFiles(torrent, meta) {
