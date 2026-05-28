@@ -12,16 +12,17 @@ VERSION="${VERSION#v}"
 PACKAGE_NAME="qbitctl-${VERSION}"
 DIST_DIR="${ROOT_DIR}/dist"
 PACKAGE_DIR="${DIST_DIR}/${PACKAGE_NAME}"
+PUBLIC_DIR="${PACKAGE_DIR}/public"
 
 rm -rf "${DIST_DIR}"
-mkdir -p "${PACKAGE_DIR}"
+mkdir -p "${PUBLIC_DIR}"
 
 if [[ ! -d "${ROOT_DIR}/build/public" ]]; then
   echo "build/public does not exist. Run yarn build first." >&2
   exit 1
 fi
 
-cp -R "${ROOT_DIR}/build/public/." "${PACKAGE_DIR}/"
+cp -R "${ROOT_DIR}/build/public/." "${PUBLIC_DIR}/"
 
 (
   cd "${DIST_DIR}"

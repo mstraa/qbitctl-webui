@@ -27,7 +27,7 @@ Dark, terminal-inspired qBittorrent WebUI built with React. The interface keeps 
 - Add modal for `.torrent` uploads and magnet/URL paste.
 - Selected torrent panel with files, trackers, save path, category, and quick tag editing.
 - Settings modal with qBittorrent preferences, advanced settings, compact mode, ratio progress toggle, and default WebUI revert action.
-- Release pipeline that builds `build/public`, wraps it in `qbitctl-<version>/`, and uploads `qbitctl-<version>.zip`.
+- Release pipeline that builds `build/public`, wraps it as `qbitctl-<version>/public/`, and uploads `qbitctl-<version>.zip`.
 
 ## Install From A Release
 
@@ -35,12 +35,12 @@ Dark, terminal-inspired qBittorrent WebUI built with React. The interface keeps 
 2. Unzip it somewhere qBittorrent can read, for example:
 
    ```bash
-   unzip qbitctl-1.0.0.zip -d /opt/qbittorrent-webuis
+   unzip qbitctl-1.0.1.zip -d /opt/qbittorrent-webuis
    ```
 
 3. In qBittorrent, open `Tools -> Options -> Web UI`.
 4. Enable `Use alternative WebUI`.
-5. Set the WebUI path to the extracted `qbitctl-<version>` folder.
+5. Set the WebUI path to the extracted `qbitctl-<version>/public` folder.
 6. Apply the settings and reload the qBittorrent WebUI.
 
 To revert, open qbitctl settings and use `Revert to default qBittorrent WebUI`, or disable `Use alternative WebUI` in qBittorrent.
@@ -61,7 +61,7 @@ The packaged file will be created at:
 dist/qbitctl-<version>.zip
 ```
 
-The zip contains a top-level `qbitctl-<version>/` folder. Point qBittorrent's alternative WebUI path at that extracted folder.
+The zip contains a top-level `qbitctl-<version>/` folder with the built WebUI under `public/`. Point qBittorrent's alternative WebUI path at `qbitctl-<version>/public`.
 
 ## Release Pipeline
 
