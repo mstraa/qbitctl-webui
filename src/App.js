@@ -228,6 +228,10 @@ function App() {
   }, [status]);
 
   useEffect(() => {
+    if (status === 'live') {
+      return;
+    }
+
     let cancelled = false;
 
     async function loadExternalIp() {
@@ -260,7 +264,7 @@ function App() {
       cancelled = true;
       window.clearInterval(refresh);
     };
-  }, []);
+  }, [status]);
 
   useEffect(() => {
     let cancelled = false;
@@ -273,12 +277,14 @@ function App() {
           const response = await fetch('/api/v2/sync/maindata', { credentials: 'same-origin' });
           if (response.ok) {
             const payload = await response.json();
-            nextInfo.freeSpace = payload.server_state &&
-              typeof payload.server_state.free_space_on_disk === 'number'
-              ? payload.server_state.free_space_on_disk
+            const serverState = payload.server_state || {};
+            nextInfo.externalIp = getExternalAddress(serverState);
+            nextInfo.freeSpace = typeof serverState.free_space_on_disk === 'number'
+              ? serverState.free_space_on_disk
               : null;
           }
         } catch (error) {
+          nextInfo.externalIp = 'unknown';
           nextInfo.freeSpace = null;
         }
       } else if (navigator.storage && navigator.storage.estimate) {
@@ -1305,6 +1311,12 @@ function getFiles(torrent, meta) {
     }));
   }
   return [{ name: torrent.name, size: torrent.size }];
+}
+
+function getExternalAddress(serverState) {
+  return serverState.last_external_address_v4 ||
+    serverState.last_external_address_v6 ||
+    'unknown';
 }
 
 function createInitialSpeedHistory() {
