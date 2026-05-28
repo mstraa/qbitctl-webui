@@ -1,8 +1,13 @@
 {
-  "name": "qbittorrent-webui-react-boilerplate",
-  "version": "0.1.0",
+  "name": "qbitctl",
+  "version": "1.0.0",
   "homepage": ".",
-  "private": true,
+  "private": false,
+  "description": "A dark terminal-inspired qBittorrent WebUI.",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/mstraa/qbitctl.git"
+  },
   "dependencies": {
     "@babel/core": "7.9.0",
     "@svgr/webpack": "4.3.3",
@@ -65,6 +70,7 @@
   "scripts": {
     "start": "node scripts/start.js",
     "build": "node scripts/build.js",
+    "package:release": "scripts/package-release.sh",
     "test": "node scripts/test.js"
   },
   "eslintConfig": {

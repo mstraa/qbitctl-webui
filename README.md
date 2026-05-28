@@ -1,35 +1,75 @@
-# React Boiler Plate for Custom qBitTorrent WebUI
+# qbitctl
 
-This project is a very simple and barebones boilerplate for creating a custom WebUI for qBitTorrent with React.
+Dark, terminal-inspired qBittorrent WebUI built with React. The interface keeps the qBittorrent API surface close at hand while using a grey scale palette, orange accent, dense torrent rows, sortable columns, tag filters, quick tag editing, settings, and add-torrent workflows.
 
-## Get Started
-As usual, just clone this repo, run 
+![qbitctl screenshot](docs/screenshot.jpg)
 
-`yarn/npm install`
- 
- Then after that to test on your local qBitTorrent, run
- 
- `yarn/npm build`
- 
- and point qBitTorrent's WebUI folder selection to the build folder.
- 
+## Features
 
-## Considerations
+- Custom dark qBittorrent WebUI with configurable accent color.
+- Torrent filters for all, active, downloading, seeding, paused, stalled, and tags.
+- Sortable torrent table with status, progress, speed, ratio, and added date.
+- Multi-select with Shift, Cmd, or Ctrl for resume, pause, and remove actions.
+- Add modal for `.torrent` uploads and magnet/URL paste.
+- Selected torrent panel with files, trackers, save path, category, and quick tag editing.
+- Settings modal with qBittorrent preferences, advanced settings, compact mode, ratio progress toggle, and default WebUI revert action.
+- Release pipeline that builds `build/public`, wraps it in `qbitctl-<version>/`, and uploads `qbitctl-<version>.zip`.
 
-#### Build command builds to /build/public
-The reason for this is so that you can use the entire build folder as your WebUI theme folder. 
+## Install From A Release
 
-### Authentication
-qBitTorrent's WebUI authenticates and throws the user around between public/private folder. In react, we don't need to do that. You can keep your app a single page application and introduce a 'softer' authentication
+1. Download `qbitctl-<version>.zip` from the GitHub release.
+2. Unzip it somewhere qBittorrent can read, for example:
 
-### Package.json
-I made one small change in package.json to allow the directory that the html files load to be correct. I added the line 
+   ```bash
+   unzip qbitctl-1.0.0.zip -d /opt/qbittorrent-webuis
+   ```
 
-`
-homepage:"."
-`
+3. In qBittorrent, open `Tools -> Options -> Web UI`.
+4. Enable `Use alternative WebUI`.
+5. Set the WebUI path to the extracted `qbitctl-<version>` folder.
+6. Apply the settings and reload the qBittorrent WebUI.
 
-Without it, the theme will not work.
+To revert, open qbitctl settings and use `Revert to default qBittorrent WebUI`, or disable `Use alternative WebUI` in qBittorrent.
+
+## Build It Yourself
+
+This project uses Yarn and an older Create React App/Webpack stack. Node 18 works with the legacy OpenSSL flag.
+
+```bash
+yarn install --frozen-lockfile
+NODE_OPTIONS=--openssl-legacy-provider yarn build
+yarn package:release
+```
+
+The packaged file will be created at:
+
+```text
+dist/qbitctl-<version>.zip
+```
+
+The zip contains a top-level `qbitctl-<version>/` folder. Point qBittorrent's alternative WebUI path at that extracted folder.
+
+## Release Pipeline
+
+The GitHub Actions workflow in `.github/workflows/release.yml` runs tests, builds the WebUI, packages `build/public`, and uploads the zip.
+
+Create a release by pushing a version tag:
+
+```bash
+git tag v1.0.0
+git push origin v1.0.0
+```
+
+The workflow can also be run manually from GitHub Actions with an optional version input. Manual runs upload the zip as a workflow artifact. Tagged runs also publish it to the GitHub release.
+
+## qBittorrent API Notes
+
+qbitctl expects to be served by qBittorrent as an alternative WebUI. Live mode uses the same-origin qBittorrent API endpoints under `/api/v2/*`. When run locally with `yarn start`, it falls back to preview data when the qBittorrent API is not available.
+
+## Privacy
+
+The repository does not include personal IP addresses, tokens, qBittorrent credentials, or local configuration files. Runtime values such as external IP and free space are fetched dynamically in the browser and are not stored in the source tree.
 
 ---
-This project was bootstrapped with [Create React App](https://github.com/facebook/create-react-app).
+
+Based on `ntoporcov/qbittorrent-webui-react-boilerplate`.
