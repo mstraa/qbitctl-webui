@@ -817,6 +817,20 @@ dd {
   width: min(640px, calc(100vw - 28px));
 }
 
+.remove-modal {
+  width: min(520px, calc(100vw - 28px));
+}
+
+.danger-row {
+  border-color: rgba(255, 107, 95, 0.45);
+}
+
+.settings-footer .danger-confirm {
+  border-color: rgba(255, 107, 95, 0.55);
+  background: rgba(255, 107, 95, 0.08);
+  color: var(--red);
+}
+
 .quick-tags {
   display: grid;
   gap: 10px;

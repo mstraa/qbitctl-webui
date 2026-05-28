@@ -175,6 +175,8 @@ function App() {
   const [addFile, setAddFile] = useState(null);
   const [addPaused, setAddPaused] = useState(false);
   const [addNotice, setAddNotice] = useState('');
+  const [removeOpen, setRemoveOpen] = useState(false);
+  const [removeDeleteData, setRemoveDeleteData] = useState(false);
   const [settings, setSettings] = useState(() => ({
     ...DEFAULT_SETTINGS,
     ...readStoredUiSettings(),
@@ -516,11 +518,15 @@ function App() {
     if (!selectedActionHashes.length) {
       return;
     }
+    if (action === 'delete') {
+      setRemoveDeleteData(false);
+      setRemoveOpen(true);
+      return;
+    }
 
     const actionMap = {
       resume: '/api/v2/torrents/resume',
       pause: '/api/v2/torrents/pause',
-      delete: '/api/v2/torrents/delete',
       recheck: '/api/v2/torrents/recheck',
     };
 
@@ -531,15 +537,40 @@ function App() {
     }
 
     const body = new URLSearchParams({ hashes: selectedActionHashes.join('|') });
-    if (action === 'delete') {
-      body.append('deleteFiles', 'false');
-    }
 
     fetch(actionMap[action], {
       method: 'POST',
       credentials: 'same-origin',
       headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
       body,
+    });
+  }
+
+  function confirmRemove() {
+    if (!selectedActionHashes.length) {
+      setRemoveOpen(false);
+      return;
+    }
+
+    if (status !== 'live') {
+      setStatus('preview action');
+      window.setTimeout(() => setStatus('preview'), 1200);
+      setRemoveOpen(false);
+      return;
+    }
+
+    fetch('/api/v2/torrents/delete', {
+      method: 'POST',
+      credentials: 'same-origin',
+      headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+      body: new URLSearchParams({
+        deleteFiles: String(removeDeleteData),
+        hashes: selectedActionHashes.join('|'),
+      }),
+    }).then(() => {
+      clearSelection();
+      setRemoveOpen(false);
+      setRemoveDeleteData(false);
     });
   }
 
@@ -925,6 +956,16 @@ function App() {
         />
       )}
 
+      {removeOpen && (
+        <RemoveTorrentModal
+          deleteData={removeDeleteData}
+          onClose={() => setRemoveOpen(false)}
+          onConfirm={confirmRemove}
+          onDeleteData={setRemoveDeleteData}
+          selectedCount={selectedActionHashes.length}
+        />
+      )}
+
       {tagEditorOpen && (
         <TagEditor
           allTags={tags}
@@ -939,9 +980,48 @@ function App() {
   );
 }
 
+function overlayClose(event, onClose) {
+  if (event.target === event.currentTarget) {
+    onClose();
+  }
+}
+
+function RemoveTorrentModal({ deleteData, onClose, onConfirm, onDeleteData, selectedCount }) {
+  return (
+    <div className="settings-overlay tag-overlay" onClick={event => overlayClose(event, onClose)} role="dialog" aria-modal="true" aria-labelledby="remove-title">
+      <section className="tag-modal remove-modal">
+        <header className="settings-head">
+          <div>
+            <span className="eyebrow">{selectedCount} selected</span>
+            <h2 id="remove-title">Remove torrents</h2>
+          </div>
+          <button className="icon-close" onClick={onClose} type="button">x</button>
+        </header>
+        <div className="settings-body">
+          <p className="settings-hint">
+            This removes {selectedCount === 1 ? 'the selected torrent' : 'the selected torrents'} from qBittorrent.
+          </p>
+          <label className="setting-row wide danger-row">
+            <span>Delete downloaded data</span>
+            <input checked={deleteData} onChange={event => onDeleteData(event.target.checked)} type="checkbox" />
+          </label>
+          <p className="settings-hint">Data deletion is off by default.</p>
+        </div>
+        <footer className="settings-footer">
+          <span>{deleteData ? 'Torrent data files will be deleted.' : 'Torrent data files will be kept.'}</span>
+          <div>
+            <button onClick={onClose} type="button">Cancel</button>
+            <button className="danger-confirm" onClick={onConfirm} type="button">Remove</button>
+          </div>
+        </footer>
+      </section>
+    </div>
+  );
+}
+
 function AddTorrentModal({ file, magnet, notice, onClose, onFile, onMagnet, onPaused, onSubmit, paused, status }) {
   return (
-    <div className="settings-overlay tag-overlay" role="dialog" aria-modal="true" aria-labelledby="add-title">
+    <div className="settings-overlay tag-overlay" onClick={event => overlayClose(event, onClose)} role="dialog" aria-modal="true" aria-labelledby="add-title">
       <section className="tag-modal add-modal">
         <header className="settings-head">
           <div>
@@ -1116,7 +1196,7 @@ function TagEditor({ allTags, draft, onClose, onSave, onUpdate, selectedCount })
   }
 
   return (
-    <div className="settings-overlay tag-overlay" role="dialog" aria-modal="true" aria-labelledby="tag-title">
+    <div className="settings-overlay tag-overlay" onClick={event => overlayClose(event, onClose)} role="dialog" aria-modal="true" aria-labelledby="tag-title">
       <section className="tag-modal">
         <header className="settings-head">
           <div>
@@ -1165,7 +1245,7 @@ function SettingsPanel({ notice, onClose, onRevert, onSave, onUpdate, settings, 
   const [advancedOpen, setAdvancedOpen] = useState(false);
   const advancedSettings = Object.entries(settings).sort(([left], [right]) => left.localeCompare(right));
   return (
-    <div className="settings-overlay" role="dialog" aria-modal="true" aria-labelledby="settings-title">
+    <div className="settings-overlay" onClick={event => overlayClose(event, onClose)} role="dialog" aria-modal="true" aria-labelledby="settings-title">
       <section className="settings-panel">
         <header className="settings-head">
           <div>
