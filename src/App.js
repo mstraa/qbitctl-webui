@@ -106,6 +106,7 @@ const FILTERS = [
   { key: 'downloading', label: 'Downloading' },
   { key: 'seeding', label: 'Seeding' },
   { key: 'paused', label: 'Paused' },
+  { key: 'stopped', label: 'Stopped' },
   { key: 'stalled', label: 'Stalled' },
 ];
 
@@ -425,6 +426,7 @@ function App() {
         (activeFilter === 'downloading' && isDownloading(torrent.state)) ||
         (activeFilter === 'seeding' && isSeeding(torrent.state)) ||
         (activeFilter === 'paused' && isPaused(torrent.state)) ||
+        (activeFilter === 'stopped' && isStopped(torrent.state)) ||
         (activeFilter === 'stalled' && isStalled(torrent.state));
       const matchesCategory = settings.ui_show_category_filters === false ||
         !categoryFilter ||
@@ -525,9 +527,9 @@ function App() {
     }
 
     const actionMap = {
-      resume: '/api/v2/torrents/resume',
-      pause: '/api/v2/torrents/pause',
-      recheck: '/api/v2/torrents/recheck',
+      resume: ['/api/v2/torrents/start', '/api/v2/torrents/resume'],
+      pause: ['/api/v2/torrents/stop', '/api/v2/torrents/pause'],
+      recheck: ['/api/v2/torrents/recheck'],
     };
 
     if (status !== 'live') {
@@ -538,11 +540,25 @@ function App() {
 
     const body = new URLSearchParams({ hashes: selectedActionHashes.join('|') });
 
-    fetch(actionMap[action], {
+    postFirstAvailable(actionMap[action], body);
+  }
+
+  function postFirstAvailable(urls, body) {
+    const [url, ...fallbacks] = urls;
+
+    fetch(url, {
       method: 'POST',
       credentials: 'same-origin',
       headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
       body,
+    }).then(response => {
+      if (!response.ok && fallbacks.length) {
+        postFirstAvailable(fallbacks, body);
+      }
+    }).catch(() => {
+      if (fallbacks.length) {
+        postFirstAvailable(fallbacks, body);
+      }
     });
   }
 
@@ -829,7 +845,7 @@ function App() {
             <div className="session-lines">
               <span>IP</span>
               <strong>{sessionInfo.externalIp || 'unknown'}</strong>
-              <span>Free space</span>
+              <span>Free</span>
               <strong>{sessionInfo.freeSpace == null ? 'unknown' : formatBytes(sessionInfo.freeSpace)}</strong>
             </div>
           </div>
@@ -1324,6 +1340,11 @@ function SettingsPanel({ notice, onClose, onRevert, onSave, onUpdate, settings, 
             <label className="setting-row wide"><span>Default save path</span><input onChange={event => onUpdate('save_path', event.target.value)} type="text" value={settings.save_path || ''} /></label>
             <label className="setting-row"><span>Use incomplete path</span><input checked={Boolean(settings.temp_path_enabled)} onChange={event => onUpdate('temp_path_enabled', event.target.checked)} type="checkbox" /></label>
             <label className="setting-row wide"><span>Incomplete path</span><input onChange={event => onUpdate('temp_path', event.target.value)} type="text" value={settings.temp_path || ''} /></label>
+            <h3>External program</h3>
+            <label className="setting-row wide"><span>Run on torrent completion</span><input checked={Boolean(settings.autorun_enabled)} onChange={event => onUpdate('autorun_enabled', event.target.checked)} type="checkbox" /></label>
+            <label className="setting-row wide"><span>Command on completion</span><textarea onChange={event => onUpdate('autorun_program', event.target.value)} rows="4" value={settings.autorun_program || ''} /></label>
+            <label className="setting-row wide"><span>Run on torrent added</span><input checked={Boolean(settings.autorun_on_torrent_added_enabled)} onChange={event => onUpdate('autorun_on_torrent_added_enabled', event.target.checked)} type="checkbox" /></label>
+            <label className="setting-row wide"><span>Command on added</span><textarea onChange={event => onUpdate('autorun_on_torrent_added_program', event.target.value)} rows="4" value={settings.autorun_on_torrent_added_program || ''} /></label>
           </section>
 
           <section className="settings-section advanced-section">
@@ -1378,6 +1399,7 @@ function countForFilter(torrents, filter) {
     if (filter === 'downloading') return isDownloading(torrent.state);
     if (filter === 'seeding') return isSeeding(torrent.state);
     if (filter === 'paused') return isPaused(torrent.state);
+    if (filter === 'stopped') return isStopped(torrent.state);
     if (filter === 'stalled') return isStalled(torrent.state);
     return false;
   }).length;
@@ -1453,6 +1475,11 @@ function isSeeding(state) {
 
 function isPaused(state) {
   return state && state.toLowerCase().indexOf('paused') !== -1;
+}
+
+function isStopped(state) {
+  const normalized = String(state || '').toLowerCase();
+  return normalized.includes('paused') || normalized.includes('stopped');
 }
 
 function isStalled(state) {

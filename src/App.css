@@ -404,6 +404,9 @@ dd {
 }
 
 .topbar {
+  position: sticky;
+  top: 0;
+  z-index: 4;
   min-height: 58px;
   display: flex;
   align-items: center;
@@ -411,6 +414,11 @@ dd {
   gap: 18px;
   padding-bottom: 14px;
   border-bottom: 1px solid var(--line);
+  background:
+    linear-gradient(rgba(255, 255, 255, 0.025) 1px, transparent 1px),
+    linear-gradient(90deg, rgba(255, 255, 255, 0.018) 1px, transparent 1px),
+    var(--bg);
+  background-size: 28px 28px;
 }
 
 .topbar h2,
@@ -459,6 +467,9 @@ dd {
 }
 
 .command-row {
+  position: sticky;
+  top: 73px;
+  z-index: 3;
   display: grid;
   grid-template-columns: auto minmax(160px, 1fr) auto;
   align-items: center;
@@ -498,6 +509,7 @@ dd {
 .torrent-table {
   border: 1px solid var(--line);
   background: rgba(16, 16, 16, 0.94);
+  max-height: calc(100vh - 198px);
   overflow: auto;
 }
 
@@ -513,7 +525,7 @@ dd {
 .table-head {
   position: sticky;
   top: 0;
-  z-index: 1;
+  z-index: 2;
   min-height: 38px;
   padding: 0 14px;
   border-bottom: 1px solid var(--line);
