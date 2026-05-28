@@ -133,6 +133,15 @@ const DEFAULT_SETTINGS = {
   ui_table_density: 'normal',
 };
 
+const APP_STATE_STORAGE_KEY = 'qbitctl.appState.v1';
+const UI_SETTING_KEYS = [
+  'ui_accent_color',
+  'ui_show_category_filters',
+  'ui_show_tag_filters',
+  'ui_show_ratio_progress',
+  'ui_table_density',
+];
+
 const COLUMNS = [
   { key: 'name', label: 'Name' },
   { key: 'state', label: 'Status' },
@@ -149,11 +158,11 @@ function App() {
   const [selectedHashes, setSelectedHashes] = useState([]);
   const [primaryHash, setPrimaryHash] = useState('');
   const [lastClickedHash, setLastClickedHash] = useState('');
-  const [activeFilter, setActiveFilter] = useState('all');
-  const [categoryFilter, setCategoryFilter] = useState('');
-  const [tagFilter, setTagFilter] = useState('');
-  const [query, setQuery] = useState('');
-  const [sort, setSort] = useState({ key: 'name', direction: 'asc' });
+  const [activeFilter, setActiveFilter] = useState(() => readAppState().activeFilter || 'all');
+  const [categoryFilter, setCategoryFilter] = useState(() => readAppState().categoryFilter || '');
+  const [tagFilter, setTagFilter] = useState(() => readAppState().tagFilter || '');
+  const [query, setQuery] = useState(() => readAppState().query || '');
+  const [sort, setSort] = useState(() => normalizeSort(readAppState().sort));
   const [status, setStatus] = useState('connecting');
   const [lastSync, setLastSync] = useState('');
   const [sessionInfo, setSessionInfo] = useState({
@@ -166,7 +175,10 @@ function App() {
   const [addFile, setAddFile] = useState(null);
   const [addPaused, setAddPaused] = useState(false);
   const [addNotice, setAddNotice] = useState('');
-  const [settings, setSettings] = useState(DEFAULT_SETTINGS);
+  const [settings, setSettings] = useState(() => ({
+    ...DEFAULT_SETTINGS,
+    ...readStoredUiSettings(),
+  }));
   const [notice, setNotice] = useState('');
   const [selectedMeta, setSelectedMeta] = useState({});
   const [tagEditorOpen, setTagEditorOpen] = useState(false);
@@ -216,9 +228,50 @@ function App() {
     }
     fetch('/api/v2/app/preferences', { credentials: 'same-origin' })
       .then(response => (response.ok ? response.json() : {}))
-      .then(preferences => setSettings(current => ({ ...current, ...preferences })))
+      .then(preferences => setSettings(current => ({
+        ...current,
+        ...preferences,
+        ...readStoredUiSettings(),
+      })))
       .catch(() => {});
   }, [status]);
+
+  useEffect(() => {
+    writeAppState({
+      activeFilter,
+      categoryFilter,
+      query,
+      sort,
+      tagFilter,
+    });
+  }, [activeFilter, categoryFilter, query, sort, tagFilter]);
+
+  useEffect(() => {
+    writeAppState({
+      settings: pickUiSettings(settings),
+    });
+  }, [settings]);
+
+  useEffect(() => {
+    function syncStoredState(event) {
+      if (event.key !== APP_STATE_STORAGE_KEY) {
+        return;
+      }
+      const nextState = readAppState();
+      setActiveFilter(nextState.activeFilter || 'all');
+      setCategoryFilter(nextState.categoryFilter || '');
+      setTagFilter(nextState.tagFilter || '');
+      setQuery(nextState.query || '');
+      setSort(normalizeSort(nextState.sort));
+      setSettings(current => ({
+        ...current,
+        ...pickUiSettings(nextState.settings || {}),
+      }));
+    }
+
+    window.addEventListener('storage', syncStoredState);
+    return () => window.removeEventListener('storage', syncStoredState);
+  }, []);
 
   useEffect(() => {
     if (status === 'live') {
@@ -371,12 +424,16 @@ function App() {
         (activeFilter === 'seeding' && isSeeding(torrent.state)) ||
         (activeFilter === 'paused' && isPaused(torrent.state)) ||
         (activeFilter === 'stalled' && isStalled(torrent.state));
-      const matchesCategory = !categoryFilter || torrent.category === categoryFilter;
-      const matchesTag = !tagFilter || parseTags(torrent.tags).includes(tagFilter);
+      const matchesCategory = settings.ui_show_category_filters === false ||
+        !categoryFilter ||
+        torrent.category === categoryFilter;
+      const matchesTag = settings.ui_show_tag_filters === false ||
+        !tagFilter ||
+        parseTags(torrent.tags).includes(tagFilter);
       const matchesQuery = searchableTorrentText(torrent).includes(query.trim().toLowerCase());
       return matchesFilter && matchesCategory && matchesTag && matchesQuery;
     });
-  }, [activeFilter, categoryFilter, query, tagFilter, torrents]);
+  }, [activeFilter, categoryFilter, query, settings.ui_show_category_filters, settings.ui_show_tag_filters, tagFilter, torrents]);
 
   const visibleTorrents = useMemo(() => {
     const next = filteredTorrents.slice();
@@ -1260,6 +1317,50 @@ function sortValue(torrent, key) {
   if (key === 'state') return formatStatus(torrent);
   if (key === 'name') return torrent.name || '';
   return torrent[key] || 0;
+}
+
+function readAppState() {
+  try {
+    const raw = window.localStorage.getItem(APP_STATE_STORAGE_KEY);
+    return raw ? JSON.parse(raw) : {};
+  } catch (error) {
+    return {};
+  }
+}
+
+function writeAppState(partialState) {
+  try {
+    const current = readAppState();
+    window.localStorage.setItem(APP_STATE_STORAGE_KEY, JSON.stringify({
+      ...current,
+      ...partialState,
+    }));
+  } catch (error) {
+    // Persistence is best-effort; the UI should keep working without storage.
+  }
+}
+
+function readStoredUiSettings() {
+  return pickUiSettings(readAppState().settings || {});
+}
+
+function pickUiSettings(settings) {
+  return UI_SETTING_KEYS.reduce((accumulator, key) => {
+    if (Object.prototype.hasOwnProperty.call(settings, key)) {
+      accumulator[key] = settings[key];
+    }
+    return accumulator;
+  }, {});
+}
+
+function normalizeSort(candidate) {
+  const fallback = { key: 'name', direction: 'asc' };
+  if (!candidate || typeof candidate !== 'object') {
+    return fallback;
+  }
+  const columnExists = COLUMNS.some(column => column.key === candidate.key);
+  const direction = candidate.direction === 'desc' ? 'desc' : 'asc';
+  return columnExists ? { key: candidate.key, direction } : fallback;
 }
 
 function isDownloading(state) {
