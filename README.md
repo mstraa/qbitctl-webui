@@ -2,7 +2,21 @@
 
 Dark, terminal-inspired qBittorrent WebUI built with React. The interface keeps the qBittorrent API surface close at hand while using a grey scale palette, orange accent, dense torrent rows, sortable columns, tag filters, quick tag editing, settings, and add-torrent workflows.
 
-![qbitctl screenshot](docs/screenshot.jpg)
+![qbitctl main torrent view](docs/screenshot-main.png)
+
+## Screenshots
+
+### Add Torrent
+
+![qbitctl add torrent modal](docs/screenshot-add.png)
+
+### Quick Tag Editing
+
+![qbitctl tag editor](docs/screenshot-tags.png)
+
+### Settings
+
+![qbitctl settings panel](docs/screenshot-settings.png)
 
 ## Features
 
