@@ -65,10 +65,22 @@ jobs:
         if: startsWith(github.ref, 'refs/tags/')
         uses: softprops/action-gh-release@v2
         with:
-          # make_latest keeps /releases/latest pointing at this release, and the
-          # fixed-name qbitctl-latest.zip asset gives a stable download URL:
-          # https://github.com/mstraa/qbitctl-webui/releases/latest/download/qbitctl-latest.zip
           make_latest: true
-          files: |
-            ${{ steps.package.outputs.zip_path }}
-            ${{ steps.package.outputs.latest_path }}
+          files: ${{ steps.package.outputs.zip_path }}
+
+      - name: Update rolling latest release
+        if: startsWith(github.ref, 'refs/tags/')
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          # Move the rolling "latest" tag to this release commit and rebuild its
+          # release, so this URL always serves the newest build:
+          # https://github.com/mstraa/qbitctl-webui/releases/download/latest/qbitctl-latest.zip
+          gh release delete latest --yes || true
+          git push origin :refs/tags/latest || true
+          git tag -f latest
+          git push origin latest
+          gh release create latest "${{ steps.package.outputs.latest_path }}" \
+            --title "latest (${GITHUB_REF_NAME})" \
+            --latest=false \
+            --notes "Rolling release that always tracks the newest version, currently ${GITHUB_REF_NAME}. Stable download URL: https://github.com/${GITHUB_REPOSITORY}/releases/download/latest/qbitctl-latest.zip"

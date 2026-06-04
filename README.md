@@ -32,15 +32,15 @@ Dark, terminal-inspired qBittorrent WebUI built with React. The interface keeps 
 - UI state (filters, search, sort, and appearance settings) persists across sessions in browser local storage.
 - Modals close on backdrop click.
 - Compatible with old and new qBittorrent API endpoints (`torrents/start` with fallback to `torrents/resume`).
-- Release pipeline that builds `build/public`, wraps it as `qbitctl-<version>/public/`, and uploads `qbitctl-<version>.zip` plus a stable-URL `qbitctl-latest.zip`.
+- Release pipeline that builds `build/public`, uploads `qbitctl-<version>.zip`, and keeps a rolling `latest` tag/release serving `qbitctl-latest.zip` from a stable URL.
 
 ## Install From A Release
 
-Every release ships a versioned `qbitctl-<version>.zip` plus a fixed-name `qbitctl-latest.zip` that extracts to a stable `qbitctl-latest/` folder. The latest zip is always available at the same URL, so installing and updating is the same two commands:
+Each version gets a numbered release with `qbitctl-<version>.zip`. A rolling `latest` tag moves to every new release and hosts `qbitctl-latest.zip`, which extracts to a stable `qbitctl-latest/` folder — so installing and updating is always the same two commands:
 
 ```bash
 curl -fL -o qbitctl-latest.zip \
-  https://github.com/mstraa/qbitctl-webui/releases/latest/download/qbitctl-latest.zip
+  https://github.com/mstraa/qbitctl-webui/releases/download/latest/qbitctl-latest.zip
 rm -rf /opt/qbittorrent-webuis/qbitctl-latest && \
   unzip -q qbitctl-latest.zip -d /opt/qbittorrent-webuis
 ```
@@ -104,7 +104,7 @@ The version defaults to the one in `package.json`; pass one explicitly with `yar
 
 ## Release Pipeline
 
-The GitHub Actions workflow in `.github/workflows/release.yml` runs tests, builds the WebUI, packages `build/public`, and uploads both `qbitctl-<version>.zip` and `qbitctl-latest.zip`. Tagged releases are marked as the latest release, so the `releases/latest/download/qbitctl-latest.zip` URL always serves the newest version.
+The GitHub Actions workflow in `.github/workflows/release.yml` runs tests, builds the WebUI, packages `build/public`, and publishes `qbitctl-<version>.zip` on the numbered release. It then force-moves the rolling `latest` tag to the same commit and recreates its release with `qbitctl-latest.zip`, so `releases/download/latest/qbitctl-latest.zip` always serves the newest version.
 
 Create a release by pushing a version tag:
 
