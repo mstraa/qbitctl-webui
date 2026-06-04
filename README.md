@@ -134,7 +134,7 @@ qbitctl expects to be served by qBittorrent as an alternative WebUI. Live mode u
 
 ## Privacy
 
-The repository does not include personal IP addresses, tokens, qBittorrent credentials, or local configuration files. Runtime values such as external IP and free space are fetched dynamically in the browser and are not stored in the source tree.
+The repository does not include personal IP addresses, tokens, qBittorrent credentials, or local configuration files. The external IP and free space shown in the sidebar come exclusively from your own qBittorrent API in live mode (no third-party IP services are contacted; preview mode shows a placeholder), and the optional version update check only contacts GitHub when explicitly enabled in settings.
 
 ---
 

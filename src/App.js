@@ -188,7 +188,9 @@ function App() {
   const [status, setStatus] = useState('connecting');
   const [lastSync, setLastSync] = useState('');
   const [sessionInfo, setSessionInfo] = useState({
-    externalIp: 'loading',
+    // Placeholder shown outside live mode; only qBittorrent's own API ever
+    // provides the real address (no third-party IP lookup).
+    externalIp: 'xxx.xxx.xxx.xxx',
     freeSpace: null,
   });
   const [settingsOpen, setSettingsOpen] = useState(false);
@@ -365,45 +367,6 @@ function App() {
     window.addEventListener('storage', syncStoredState);
     return () => window.removeEventListener('storage', syncStoredState);
   }, []);
-
-  useEffect(() => {
-    if (status === 'live') {
-      return;
-    }
-
-    let cancelled = false;
-
-    async function loadExternalIp() {
-      try {
-        const response = await fetch(`https://api.ipify.org?format=json&_=${Date.now()}`, {
-          cache: 'no-store',
-        });
-        if (response.ok) {
-          const payload = await response.json();
-          if (!cancelled) {
-            setSessionInfo(current => ({
-              ...current,
-              externalIp: payload.ip || 'unknown',
-            }));
-          }
-        }
-      } catch (error) {
-        if (!cancelled) {
-          setSessionInfo(current => ({
-            ...current,
-            externalIp: 'unknown',
-          }));
-        }
-      }
-    }
-
-    loadExternalIp();
-    const refresh = window.setInterval(loadExternalIp, 30000);
-    return () => {
-      cancelled = true;
-      window.clearInterval(refresh);
-    };
-  }, [status]);
 
   useEffect(() => {
     let cancelled = false;

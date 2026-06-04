@@ -139,6 +139,14 @@ function githubWasCalled() {
   return global.fetch.mock.calls.some(([url]) => String(url).includes('api.github.com'));
 }
 
+test('preview mode shows an IP placeholder and never calls third-party IP services', async () => {
+  const { findByText, getByText } = render(<App />);
+  await findByText('archlinux-2026.05.01-x86_64.iso');
+
+  expect(getByText('xxx.xxx.xxx.xxx')).toBeInTheDocument();
+  expect(global.fetch.mock.calls.some(([url]) => String(url).includes('ipify'))).toBe(false);
+});
+
 test('version check is opt-in: no button and no GitHub call by default', async () => {
   const { findByText, getByLabelText, getByText, queryByTitle } = render(<App />);
   await findByText('archlinux-2026.05.01-x86_64.iso');
