@@ -68,14 +68,21 @@ jobs:
         if: startsWith(github.ref, 'refs/tags/')
         id: changelog
         run: |
+          # Detailed changelog: commit subjects with their full bodies nested
+          # below, skipping the "Release qbitctl x.y.z" bump commits and
+          # Co-Authored-By trailers.
           PREV_TAG="$(git describe --tags --match 'v[0-9]*' --abbrev=0 "${GITHUB_REF_NAME}^" 2>/dev/null || true)"
+          RANGE="${GITHUB_REF_NAME}"
+          if [ -n "$PREV_TAG" ]; then
+            RANGE="${PREV_TAG}..${GITHUB_REF_NAME}"
+          fi
           {
             echo 'body<<CHANGELOG_EOF'
-            if [ -n "$PREV_TAG" ]; then
-              git log --no-merges --pretty=format:'- %s' "${PREV_TAG}..${GITHUB_REF_NAME}"
-            else
-              git log --no-merges --pretty=format:'- %s' "${GITHUB_REF_NAME}"
-            fi
+            git log --no-merges --grep='^Release qbitctl' --invert-grep \
+              --pretty=format:'- %s%n%w(0,2,2)%b' "$RANGE" \
+              | grep -v 'Co-Authored-By:' \
+              | sed -e 's/[[:space:]]*$//' \
+              | cat -s
             echo
             echo 'CHANGELOG_EOF'
           } >> "$GITHUB_OUTPUT"

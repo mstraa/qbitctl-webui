@@ -20,20 +20,38 @@ Dark, terminal-inspired qBittorrent WebUI built with React. The interface keeps 
 
 ## Features
 
-- Custom dark qBittorrent WebUI with configurable accent color.
-- Torrent filters for all, active, downloading, seeding, stopped, and stalled, plus category filters and multi-select tag filters (torrents must match every selected tag) with counts.
-- Sortable torrent table with status, progress, speed, ratio, and added date, with a sticky header and toolbar.
-- Multi-select with Shift, Cmd, or Ctrl for resume, stop, recheck, and remove actions.
-- Remove confirmation modal with an optional `Delete downloaded data` checkbox.
-- Add modal accepting multiple `.torrent` files and magnet/URL paste, with tags at add time and an `Add stopped` option for import workflows (add stopped, recheck, then resume).
-- Selected torrent panel with ETA, files, peers, save path, category, and quick tag editing.
-- Tracker list with per-tracker status; click a tracker to expand its latest response message and force a reannounce.
-- Settings modal with qBittorrent preferences, advanced settings, compact mode, ratio progress toggle, and default WebUI revert action.
+### Torrent management
+
+- Sortable torrent table (name, status, progress, down/up speed, ratio, added date) with a sticky header and toolbar.
+- Status filters for all, active, downloading, seeding, stopped, and stalled torrents, plus category filters, all with live counts.
+- Multi-select tag filters with AND matching: a torrent must carry every selected tag to show.
+- Search bar matching name, hash, category, tags, status, and save path.
+- Multi-select rows with Shift, Cmd, or Ctrl for resume, stop, recheck, and remove actions.
+- Remove confirmation modal with an optional `Delete downloaded data` checkbox (off by default).
+- Add modal accepting multiple `.torrent` files and magnet/URL paste, with tags applied at add time and an `Add stopped` option for import workflows (add stopped, recheck, then resume).
+
+### Torrent details
+
+- Selected torrent panel with state, sizes, speeds, ratio, seeds/peers, ETA, added/completed dates, category, and save path.
+- Quick tag editing with one-click toggles for existing tags.
+- Tracker list with per-tracker status; click a tracker to expand its latest response message and peer counts, with force reannounce for the torrent or from any tracker row.
+- File and peer lists for the selected torrent.
+
+### Interface
+
+- Dark, terminal-inspired theme with configurable accent color and a compact table density option.
+- Activity graph of upload/download speed history with the peak value labeled on the Y axis.
+- Transfer totals, external IP, and free disk space in the sidebar.
 - UI state (filters, search, sort, and appearance settings) persists across sessions in browser local storage.
-- Sidebar version button (checked once per page load against GitHub releases) highlights available updates and opens a changelog modal with the release link and qBittorrent version; can be hidden in settings.
 - Modals close on backdrop click.
-- Compatible with old and new qBittorrent API endpoints (`torrents/start` with fallback to `torrents/resume`).
-- Release pipeline that builds `build/public`, generates a changelog, and uploads `qbitctl-<version>.zip` plus a stable-URL `qbitctl.zip`.
+- Settings modal with common qBittorrent preferences, the full advanced preference list, and a revert-to-default-WebUI action.
+
+### Updates and compatibility
+
+- Sidebar version button: checks GitHub once per page load, highlights available updates, and opens a modal with the changelog, the release link, and the connected qBittorrent version. Can be hidden in settings.
+- Works with both qBittorrent API generations (`torrents/start`/`torrents/stop` with fallback to `torrents/resume`/`torrents/pause`).
+- Preview mode with sample data whenever the qBittorrent API is unreachable, for local development.
+- Release pipeline that tests, builds, generates a changelog, and uploads `qbitctl-<version>.zip` plus a stable-URL `qbitctl.zip`.
 
 ## Install From A Release
 
@@ -42,8 +60,7 @@ Every release carries a versioned `qbitctl-<version>.zip` plus a fixed-name `qbi
 ```bash
 curl -fL -o qbitctl.zip \
   https://github.com/mstraa/qbitctl-webui/releases/latest/download/qbitctl.zip
-rm -rf /opt/qbittorrent-webuis/qbitctl && \
-  unzip -q qbitctl.zip -d /opt/qbittorrent-webuis
+unzip -oq qbitctl.zip -d /opt/qbittorrent-webuis
 ```
 
 First-time setup:
@@ -54,7 +71,7 @@ First-time setup:
 4. Set the WebUI path to the extracted `qbitctl/public` folder (or `qbitctl-<version>/public` if you prefer pinned versions).
 5. Apply the settings and reload the qBittorrent WebUI.
 
-To update later, just re-run the curl + unzip commands and reload the WebUI — the path stays the same.
+To update later, re-run the two commands above (`-o` overwrites the previous version in place) and reload the WebUI — the path never changes.
 
 To revert, open qbitctl settings and use `Revert to default qBittorrent WebUI`, or disable `Use alternative WebUI` in qBittorrent.
 
@@ -68,8 +85,8 @@ To revert, open qbitctl settings and use `Revert to default qBittorrent WebUI`, 
 ### Setup
 
 ```bash
-git clone https://github.com/mstraa/qbitctl.git
-cd qbitctl
+git clone https://github.com/mstraa/qbitctl-webui.git
+cd qbitctl-webui
 yarn install --frozen-lockfile
 ```
 
