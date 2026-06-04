@@ -248,12 +248,33 @@ button {
   font-weight: 500;
 }
 
+.speed-plot {
+  position: relative;
+  margin: 10px 0 8px;
+}
+
 .speed-history svg {
   width: 100%;
   height: 74px;
-  margin: 10px 0 8px;
   display: block;
   overflow: visible;
+}
+
+.speed-axis {
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+}
+
+.speed-axis span {
+  position: absolute;
+  left: 2px;
+  transform: translateY(-50%);
+  color: var(--faint);
+  font-family: "SFMono-Regular", Consolas, "Liberation Mono", monospace;
+  font-size: 9px;
+  line-height: 1;
+  text-shadow: 0 0 4px var(--panel);
 }
 
 .speed-history path {

@@ -21,7 +21,7 @@ Dark, terminal-inspired qBittorrent WebUI built with React. The interface keeps 
 ## Features
 
 - Custom dark qBittorrent WebUI with configurable accent color.
-- Torrent filters for all, active, downloading, seeding, stopped, and stalled, plus category filters and multi-select tag filters with counts.
+- Torrent filters for all, active, downloading, seeding, stopped, and stalled, plus category filters and multi-select tag filters (torrents must match every selected tag) with counts.
 - Sortable torrent table with status, progress, speed, ratio, and added date, with a sticky header and toolbar.
 - Multi-select with Shift, Cmd, or Ctrl for resume, stop, recheck, and remove actions.
 - Remove confirmation modal with an optional `Delete downloaded data` checkbox.

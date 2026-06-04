@@ -31,27 +31,44 @@ test('stopped preview torrent shows a Stopped badge', async () => {
   expect(await findByText('Stopped', { selector: '.status-badge' })).toBeInTheDocument();
 });
 
-test('tag filters support multi-select with OR matching', async () => {
+test('tag filters support multi-select with AND matching', async () => {
   const { findByLabelText, findByText, queryByText } = render(<App />);
   await findByText('archlinux-2026.05.01-x86_64.iso');
   const tagNav = await findByLabelText('Tag filters');
 
   fireEvent.click(within(tagNav).getByText('linux'));
-  fireEvent.click(within(tagNav).getByText('archive'));
+  fireEvent.click(within(tagNav).getByText('mirror'));
 
+  // Only the torrent carrying BOTH tags survives.
   expect(within(tagNav).getByText('linux').closest('button')).toHaveClass('active');
-  expect(within(tagNav).getByText('archive').closest('button')).toHaveClass('active');
+  expect(within(tagNav).getByText('mirror').closest('button')).toHaveClass('active');
   expect(queryByText('archlinux-2026.05.01-x86_64.iso')).toBeInTheDocument();
-  expect(queryByText('public-domain-documentary-collection')).toBeInTheDocument();
+  expect(queryByText('public-domain-documentary-collection')).toBeNull();
   expect(queryByText('nightly.build.assets.pack')).toBeNull();
 
   const stored = JSON.parse(window.localStorage.getItem('qbitctl.appState.v1'));
-  expect(stored.tagFilters).toEqual(['linux', 'archive']);
+  expect(stored.tagFilters).toEqual(['linux', 'mirror']);
   expect(stored).not.toHaveProperty('tagFilter');
+
+  // Adding a tag no torrent shares empties the list (AND, not OR).
+  fireEvent.click(within(tagNav).getByText('archive'));
+  expect(queryByText('archlinux-2026.05.01-x86_64.iso')).toBeNull();
+  expect(queryByText('No torrents match this filter.')).toBeInTheDocument();
 
   // Toggling a selected tag off removes it from the filter set.
   fireEvent.click(within(tagNav).getByText('archive'));
-  expect(queryByText('public-domain-documentary-collection')).toBeNull();
+  expect(queryByText('archlinux-2026.05.01-x86_64.iso')).toBeInTheDocument();
+});
+
+test('activity graph labels the Y axis with max, half, and zero', async () => {
+  const { findByLabelText, findByText } = render(<App />);
+  await findByText('archlinux-2026.05.01-x86_64.iso');
+  const graph = await findByLabelText('Last hour speed graph');
+
+  // Preview totals peak at 11.8 MB/s down -> axis shows "11M", half "5.6M", and 0.
+  expect(within(graph).getByText('11M')).toBeInTheDocument();
+  expect(within(graph).getByText('5.6M')).toBeInTheDocument();
+  expect(within(graph).getByText('0')).toBeInTheDocument();
 });
 
 test('legacy persisted state migrates paused filter and single tag', async () => {

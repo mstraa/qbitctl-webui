@@ -452,7 +452,7 @@ function App() {
       const torrentTags = parseTags(torrent.tags);
       const matchesTag = settings.ui_show_tag_filters === false ||
         !tagFilters.length ||
-        tagFilters.some(tag => torrentTags.includes(tag));
+        tagFilters.every(tag => torrentTags.includes(tag));
       const matchesQuery = searchableTorrentText(torrent).includes(query.trim().toLowerCase());
       return matchesFilter && matchesCategory && matchesTag && matchesQuery;
     });
@@ -1194,10 +1194,11 @@ function SpeedValue({ bytes }) {
 }
 
 function SpeedHistoryGraph({ history }) {
-  const max = Math.max(
-    1,
+  const dataMax = Math.max(
+    0,
     ...history.map(point => Math.max(point.down || 0, point.up || 0))
   );
+  const max = Math.max(1, dataMax);
   const downPath = buildLinePath(history.map(point => point.down || 0), max);
   const upPath = buildLinePath(history.map(point => point.up || 0), max);
 
@@ -1206,11 +1207,19 @@ function SpeedHistoryGraph({ history }) {
       <header>
         <span>Activity</span>
       </header>
-      <svg viewBox="0 0 100 38" preserveAspectRatio="none" role="img">
-        <path className="grid-line" d="M0 9.5 H100 M0 19 H100 M0 28.5 H100" />
-        <path className="up-line" d={upPath} />
-        <path className="down-line" d={downPath} />
-      </svg>
+      <div className="speed-plot">
+        <svg viewBox="0 0 100 38" preserveAspectRatio="none" role="img">
+          {/* Grid lines sit at max (y=2), max/2 (y=18), and 0 (y=34) to match the axis labels. */}
+          <path className="grid-line" d="M0 2 H100 M0 18 H100 M0 34 H100" />
+          <path className="up-line" d={upPath} />
+          <path className="down-line" d={downPath} />
+        </svg>
+        <div className="speed-axis" aria-hidden="true">
+          <span style={{ top: `${(2 / 38) * 100}%` }}>{dataMax ? formatAxisSpeed(dataMax) : '--'}</span>
+          <span style={{ top: `${(18 / 38) * 100}%` }}>{dataMax ? formatAxisSpeed(dataMax / 2) : '--'}</span>
+          <span style={{ top: `${(34 / 38) * 100}%` }}>0</span>
+        </div>
+      </div>
       <div className="speed-legend">
         <span><i className="legend-up" />up</span>
         <span><i className="legend-down" />down</span>
@@ -1715,6 +1724,17 @@ function formatRatio(ratio) {
 
 function formatSpeed(bytes) {
   return `${formatBytes(bytes)}/s`;
+}
+
+// Compact byte/s label for the activity graph axis, e.g. "11M" or "450K".
+function formatAxisSpeed(bytes) {
+  if (!bytes || bytes < 1) {
+    return '0';
+  }
+  const units = ['B', 'K', 'M', 'G', 'T'];
+  const exponent = Math.min(Math.floor(Math.log(bytes) / Math.log(1024)), units.length - 1);
+  const value = bytes / Math.pow(1024, exponent);
+  return `${value >= 10 || exponent === 0 ? Math.round(value) : value.toFixed(1)}${units[exponent]}`;
 }
 
 // qBittorrent reports 8640000 seconds (100 days) when the ETA is unknown/infinite.
