@@ -55,7 +55,7 @@ Dark, terminal-inspired qBittorrent WebUI built with React. The interface keeps 
 
 ## Install From A Release
 
-Every release carries a versioned `qbitctl-<version>.zip` plus a fixed-name `qbitctl.zip` that extracts to a stable `qbitctl/` folder. GitHub's `releases/latest` alias always follows the newest release, so installing and updating is always the same two commands:
+Download the [latest release](https://github.com/mstraa/qbitctl-webui/releases/latest/download/qbitctl.zip) and unzip it somewhere qBittorrent can read:
 
 ```bash
 curl -fL -o qbitctl.zip \
@@ -63,15 +63,9 @@ curl -fL -o qbitctl.zip \
 unzip -oq qbitctl.zip -d /opt/qbittorrent-webuis
 ```
 
-First-time setup:
+Then enable it by following qBittorrent's [Alternate WebUI documentation](https://github.com/qbittorrent/qBittorrent/wiki/Alternate-WebUI-usage), pointing the WebUI path at the extracted `qbitctl/public` folder.
 
-1. Run the commands above (pick any folder qBittorrent can read instead of `/opt/qbittorrent-webuis`).
-2. In qBittorrent, open `Tools -> Options -> Web UI`.
-3. Enable `Use alternative WebUI`.
-4. Set the WebUI path to the extracted `qbitctl/public` folder (or `qbitctl-<version>/public` if you prefer pinned versions).
-5. Apply the settings and reload the qBittorrent WebUI.
-
-To update later, re-run the two commands above (`-o` overwrites the previous version in place) and reload the WebUI — the path never changes.
+The download URL always serves the newest version. To update, re-run the same two commands and reload the WebUI — the extracted path never changes, so qBittorrent needs no reconfiguration.
 
 To revert, open qbitctl settings and use `Revert to default qBittorrent WebUI`, or disable `Use alternative WebUI` in qBittorrent.
 
