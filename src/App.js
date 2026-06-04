@@ -13,6 +13,7 @@ const SAMPLE_TORRENTS = [
     downloaded: 690000000,
     uploaded: 322000000,
     ratio: 0.47,
+    eta: 22,
     num_seeds: 91,
     num_leechs: 14,
     category: 'linux',
@@ -20,7 +21,11 @@ const SAMPLE_TORRENTS = [
     tags: 'linux, mirror',
     added_on: 1779734520,
     completion_on: 0,
-    trackers: ['tracker.opentrackr.org', 'torrent.ubuntu.com', 'ipv6.torrent.ubuntu.com'],
+    trackers: [
+      { url: 'udp://tracker.opentrackr.org:1337/announce', status: 2, msg: '', num_seeds: 91, num_peers: 14 },
+      { url: 'https://torrent.ubuntu.com/announce', status: 2, msg: '', num_seeds: 64, num_peers: 9 },
+      { url: 'https://ipv6.torrent.ubuntu.com/announce', status: 1, msg: '', num_seeds: 0, num_peers: 0 },
+    ],
     files: [
       { name: 'archlinux-2026.05.01-x86_64.iso', size: 944786432, progress: 0.73 },
       { name: 'archlinux-bootstrap.sig', size: 566, progress: 1 },
@@ -37,6 +42,7 @@ const SAMPLE_TORRENTS = [
     downloaded: 6992000000,
     uploaded: 980000000,
     ratio: 0.14,
+    eta: 8640000,
     num_seeds: 0,
     num_leechs: 6,
     category: 'work',
@@ -44,7 +50,10 @@ const SAMPLE_TORRENTS = [
     tags: 'nightly, assets',
     added_on: 1779671220,
     completion_on: 0,
-    trackers: ['tracker.internal.local', 'opentracker.i2p.rocks'],
+    trackers: [
+      { url: 'udp://tracker.internal.local:6969/announce', status: 4, msg: 'Connection timed out', num_seeds: 0, num_peers: 0 },
+      { url: 'http://opentracker.i2p.rocks:6969/announce', status: 1, msg: '', num_seeds: 0, num_peers: 0 },
+    ],
     files: [
       { name: 'textures/base.pack', size: 6400000000, progress: 0.52 },
       { name: 'meshes/nightly.pack', size: 12000000000, progress: 0.31 },
@@ -61,6 +70,7 @@ const SAMPLE_TORRENTS = [
     downloaded: 12400000000,
     uploaded: 48600000000,
     ratio: 3.92,
+    eta: 8640000,
     num_seeds: 38,
     num_leechs: 3,
     category: 'media',
@@ -68,7 +78,10 @@ const SAMPLE_TORRENTS = [
     tags: 'archive, public-domain',
     added_on: 1779458400,
     completion_on: 1779482100,
-    trackers: ['tracker.publicbt.com', 'tracker.opentrackr.org'],
+    trackers: [
+      { url: 'udp://tracker.publicbt.com:80/announce', status: 4, msg: 'Torrent not registered with this tracker', num_seeds: 0, num_peers: 0 },
+      { url: 'udp://tracker.opentrackr.org:1337/announce', status: 2, msg: '', num_seeds: 38, num_peers: 3 },
+    ],
     files: [
       { name: 'documentary-collection/part-01.mkv', size: 6200000000, progress: 1 },
       { name: 'documentary-collection/part-02.mkv', size: 6200000000, progress: 1 },
@@ -85,14 +98,18 @@ const SAMPLE_TORRENTS = [
     downloaded: 8580000000,
     uploaded: 12000000,
     ratio: 0,
+    eta: 8640000,
     num_seeds: 12,
     num_leechs: 41,
     category: 'datasets',
     save_path: '/data/torrents/datasets',
-    tags: 'reference, paused',
+    tags: 'reference, stopped',
     added_on: 1779300000,
     completion_on: 0,
-    trackers: ['academictorrents.com', 'tracker.storage.local'],
+    trackers: [
+      { url: 'https://academictorrents.com/announce.php', status: 0, msg: '', num_seeds: 0, num_peers: 0 },
+      { url: 'udp://tracker.storage.local:6969/announce', status: 0, msg: '', num_seeds: 0, num_peers: 0 },
+    ],
     files: [
       { name: 'reference-dataset-v14.tar.zst', size: 78000000000, progress: 0.11 },
       { name: 'manifest.json', size: 112000, progress: 1 },
@@ -105,7 +122,6 @@ const FILTERS = [
   { key: 'active', label: 'Active' },
   { key: 'downloading', label: 'Downloading' },
   { key: 'seeding', label: 'Seeding' },
-  { key: 'paused', label: 'Paused' },
   { key: 'stopped', label: 'Stopped' },
   { key: 'stalled', label: 'Stalled' },
 ];
@@ -159,9 +175,9 @@ function App() {
   const [selectedHashes, setSelectedHashes] = useState([]);
   const [primaryHash, setPrimaryHash] = useState('');
   const [lastClickedHash, setLastClickedHash] = useState('');
-  const [activeFilter, setActiveFilter] = useState(() => readAppState().activeFilter || 'all');
+  const [activeFilter, setActiveFilter] = useState(() => normalizeFilter(readAppState().activeFilter));
   const [categoryFilter, setCategoryFilter] = useState(() => readAppState().categoryFilter || '');
-  const [tagFilter, setTagFilter] = useState(() => readAppState().tagFilter || '');
+  const [tagFilters, setTagFilters] = useState(() => normalizeTagFilters(readAppState()));
   const [query, setQuery] = useState(() => readAppState().query || '');
   const [sort, setSort] = useState(() => normalizeSort(readAppState().sort));
   const [status, setStatus] = useState('connecting');
@@ -173,8 +189,9 @@ function App() {
   const [settingsOpen, setSettingsOpen] = useState(false);
   const [addOpen, setAddOpen] = useState(false);
   const [addMagnet, setAddMagnet] = useState('');
-  const [addFile, setAddFile] = useState(null);
-  const [addPaused, setAddPaused] = useState(false);
+  const [addFiles, setAddFiles] = useState([]);
+  const [addTags, setAddTags] = useState('');
+  const [addStopped, setAddStopped] = useState(false);
   const [addNotice, setAddNotice] = useState('');
   const [removeOpen, setRemoveOpen] = useState(false);
   const [removeDeleteData, setRemoveDeleteData] = useState(false);
@@ -245,9 +262,11 @@ function App() {
       categoryFilter,
       query,
       sort,
-      tagFilter,
+      // Drop the legacy single-tag key; JSON.stringify omits undefined values.
+      tagFilter: undefined,
+      tagFilters,
     });
-  }, [activeFilter, categoryFilter, query, sort, tagFilter]);
+  }, [activeFilter, categoryFilter, query, sort, tagFilters]);
 
   useEffect(() => {
     writeAppState({
@@ -261,9 +280,9 @@ function App() {
         return;
       }
       const nextState = readAppState();
-      setActiveFilter(nextState.activeFilter || 'all');
+      setActiveFilter(normalizeFilter(nextState.activeFilter));
       setCategoryFilter(nextState.categoryFilter || '');
-      setTagFilter(nextState.tagFilter || '');
+      setTagFilters(normalizeTagFilters(nextState));
       setQuery(nextState.query || '');
       setSort(normalizeSort(nextState.sort));
       setSettings(current => ({
@@ -425,19 +444,19 @@ function App() {
         (activeFilter === 'active' && isActive(torrent)) ||
         (activeFilter === 'downloading' && isDownloading(torrent.state)) ||
         (activeFilter === 'seeding' && isSeeding(torrent.state)) ||
-        (activeFilter === 'paused' && isPaused(torrent.state)) ||
         (activeFilter === 'stopped' && isStopped(torrent.state)) ||
         (activeFilter === 'stalled' && isStalled(torrent.state));
       const matchesCategory = settings.ui_show_category_filters === false ||
         !categoryFilter ||
         torrent.category === categoryFilter;
+      const torrentTags = parseTags(torrent.tags);
       const matchesTag = settings.ui_show_tag_filters === false ||
-        !tagFilter ||
-        parseTags(torrent.tags).includes(tagFilter);
+        !tagFilters.length ||
+        tagFilters.some(tag => torrentTags.includes(tag));
       const matchesQuery = searchableTorrentText(torrent).includes(query.trim().toLowerCase());
       return matchesFilter && matchesCategory && matchesTag && matchesQuery;
     });
-  }, [activeFilter, categoryFilter, query, settings.ui_show_category_filters, settings.ui_show_tag_filters, tagFilter, torrents]);
+  }, [activeFilter, categoryFilter, query, settings.ui_show_category_filters, settings.ui_show_tag_filters, tagFilters, torrents]);
 
   const visibleTorrents = useMemo(() => {
     const next = filteredTorrents.slice();
@@ -516,6 +535,14 @@ function App() {
     setPrimaryHash('');
   }
 
+  function toggleTagFilter(tag) {
+    setTagFilters(current =>
+      current.includes(tag)
+        ? current.filter(item => item !== tag)
+        : current.concat(tag)
+    );
+  }
+
   function handleAction(action) {
     if (!selectedActionHashes.length) {
       return;
@@ -528,7 +555,7 @@ function App() {
 
     const actionMap = {
       resume: ['/api/v2/torrents/start', '/api/v2/torrents/resume'],
-      pause: ['/api/v2/torrents/stop', '/api/v2/torrents/pause'],
+      stop: ['/api/v2/torrents/stop', '/api/v2/torrents/pause'],
       recheck: ['/api/v2/torrents/recheck'],
     };
 
@@ -541,6 +568,18 @@ function App() {
     const body = new URLSearchParams({ hashes: selectedActionHashes.join('|') });
 
     postFirstAvailable(actionMap[action], body);
+  }
+
+  function reannounceTorrent(hash) {
+    if (!hash) {
+      return;
+    }
+    if (status !== 'live') {
+      setStatus('preview action');
+      window.setTimeout(() => setStatus('preview'), 1200);
+      return;
+    }
+    postFirstAvailable(['/api/v2/torrents/reannounce'], new URLSearchParams({ hashes: hash }));
   }
 
   function postFirstAvailable(urls, body) {
@@ -598,15 +637,16 @@ function App() {
   function closeAddModal() {
     setAddOpen(false);
     setAddMagnet('');
-    setAddFile(null);
-    setAddPaused(false);
+    setAddFiles([]);
+    setAddTags('');
+    setAddStopped(false);
     setAddNotice('');
   }
 
   function addTorrent() {
     const urls = addMagnet.trim();
-    if (!urls && !addFile) {
-      setAddNotice('Paste a magnet/URL or choose a .torrent file.');
+    if (!urls && !addFiles.length) {
+      setAddNotice('Paste a magnet/URL or choose .torrent files.');
       return;
     }
 
@@ -619,12 +659,14 @@ function App() {
     if (urls) {
       body.append('urls', urls);
     }
-    if (addFile) {
-      body.append('torrents', addFile, addFile.name);
-    }
-    if (addPaused) {
+    addFiles.forEach(file => body.append('torrents', file, file.name));
+    if (addStopped) {
       body.append('stopped', 'true');
       body.append('paused', 'true');
+    }
+    const tagList = parseTags(addTags);
+    if (tagList.length) {
+      body.append('tags', tagList.join(','));
     }
 
     fetch('/api/v2/torrents/add', {
@@ -639,7 +681,7 @@ function App() {
         closeAddModal();
         setLastSync(new Date().toLocaleTimeString());
       })
-      .catch(() => setAddNotice('qBittorrent rejected this torrent.'));
+      .catch(() => setAddNotice('qBittorrent rejected the add request.'));
   }
 
   function updateSetting(key, value) {
@@ -806,8 +848,8 @@ function App() {
           <nav className="filter-list tags-filter" aria-label="Tag filters">
             <span className="sidebar-label">tags</span>
             <button
-              className={!tagFilter ? 'active' : ''}
-              onClick={() => setTagFilter('')}
+              className={!tagFilters.length ? 'active' : ''}
+              onClick={() => setTagFilters([])}
               type="button"
             >
               <span>All tags</span>
@@ -815,9 +857,9 @@ function App() {
             </button>
             {tags.map(tag => (
               <button
-                className={tag === tagFilter ? 'active' : ''}
+                className={tagFilters.includes(tag) ? 'active' : ''}
                 key={tag}
-                onClick={() => setTagFilter(tag)}
+                onClick={() => toggleTagFilter(tag)}
                 type="button"
               >
                 <span>{tag}</span>
@@ -861,7 +903,7 @@ function App() {
           <div className="toolbar" aria-label="Torrent actions">
             <button className="add-button" onClick={openAddModal} type="button">ADD</button>
             <button onClick={() => handleAction('resume')} type="button">Resume</button>
-            <button onClick={() => handleAction('pause')} type="button">Pause</button>
+            <button onClick={() => handleAction('stop')} type="button">Stop</button>
             <button onClick={() => handleAction('recheck')} type="button">Recheck</button>
             <button className="danger" onClick={() => handleAction('delete')} type="button">Remove</button>
             <button
@@ -938,6 +980,7 @@ function App() {
               meta={selectedMeta}
               onClose={clearSelection}
               onEditTags={openTagEditor}
+              onReannounce={() => reannounceTorrent(selectedTorrent.hash)}
               selectedCount={selectedCount}
               torrent={selectedTorrent}
             />
@@ -959,16 +1002,19 @@ function App() {
 
       {addOpen && (
         <AddTorrentModal
-          file={addFile}
+          allTags={tags}
+          files={addFiles}
           magnet={addMagnet}
           notice={addNotice}
           onClose={closeAddModal}
-          onFile={setAddFile}
+          onFiles={setAddFiles}
           onMagnet={setAddMagnet}
-          onPaused={setAddPaused}
+          onStopped={setAddStopped}
           onSubmit={addTorrent}
-          paused={addPaused}
+          onTags={setAddTags}
           status={status}
+          stopped={addStopped}
+          tags={addTags}
         />
       )}
 
@@ -1035,42 +1081,82 @@ function RemoveTorrentModal({ deleteData, onClose, onConfirm, onDeleteData, sele
   );
 }
 
-function AddTorrentModal({ file, magnet, notice, onClose, onFile, onMagnet, onPaused, onSubmit, paused, status }) {
+function AddTorrentModal({ allTags, files, magnet, notice, onClose, onFiles, onMagnet, onStopped, onSubmit, onTags, status, stopped, tags }) {
+  const draftTags = parseTags(tags);
+
+  function toggleTag(tag) {
+    const nextTags = draftTags.includes(tag)
+      ? draftTags.filter(item => item !== tag)
+      : draftTags.concat(tag);
+    onTags(nextTags.join(', '));
+  }
+
   return (
     <div className="settings-overlay tag-overlay" onClick={event => overlayClose(event, onClose)} role="dialog" aria-modal="true" aria-labelledby="add-title">
       <section className="tag-modal add-modal">
         <header className="settings-head">
           <div>
             <span className="eyebrow">/api/v2/torrents/add</span>
-            <h2 id="add-title">Add torrent</h2>
+            <h2 id="add-title">Add torrents</h2>
           </div>
           <button className="icon-close" onClick={onClose} type="button">x</button>
         </header>
         <div className="settings-body">
           <label className="setting-row wide add-file-row">
-            <span>Torrent file</span>
+            <span>Torrent files</span>
             <input
               accept=".torrent,application/x-bittorrent"
-              onChange={event => onFile(event.target.files && event.target.files[0] ? event.target.files[0] : null)}
+              multiple
+              onChange={event => onFiles(event.target.files ? Array.from(event.target.files) : [])}
               type="file"
             />
-            <strong>{file ? file.name : 'no file selected'}</strong>
+            <strong>
+              {files.length
+                ? `${files.length} file${files.length === 1 ? '' : 's'}: ${files.map(file => file.name).join(', ')}`
+                : 'no files selected'}
+            </strong>
           </label>
           <label className="setting-row wide add-text-row">
             <span>Magnet or URL</span>
             <textarea
               onChange={event => onMagnet(event.target.value)}
-              placeholder="magnet:?xt=urn:btih:..."
+              placeholder="magnet:?xt=urn:btih:... (one per line)"
               rows="5"
               value={magnet}
             />
           </label>
           <label className="setting-row wide">
-            <span>Add paused</span>
-            <input checked={paused} onChange={event => onPaused(event.target.checked)} type="checkbox" />
+            <span>Tags</span>
+            <input
+              onChange={event => onTags(event.target.value)}
+              placeholder="comma-separated tags"
+              type="text"
+              value={tags}
+            />
+          </label>
+          {allTags.length > 0 && (
+            <section className="quick-tags" aria-label="Existing tags">
+              <span>Quick add / remove</span>
+              <div>
+                {allTags.map(tag => (
+                  <button
+                    className={draftTags.includes(tag) ? 'active' : ''}
+                    key={tag}
+                    onClick={() => toggleTag(tag)}
+                    type="button"
+                  >
+                    {tag}
+                  </button>
+                ))}
+              </div>
+            </section>
+          )}
+          <label className="setting-row wide">
+            <span>Add stopped</span>
+            <input checked={stopped} onChange={event => onStopped(event.target.checked)} type="checkbox" />
           </label>
           <p className="settings-hint">
-            Current mode: {status}. Enable Add paused when importing your own data, then recheck it before resuming.
+            Current mode: {status}. Enable Add stopped when importing your own data, then recheck it before resuming.
           </p>
         </div>
         <footer className="settings-footer">
@@ -1133,7 +1219,7 @@ function SpeedHistoryGraph({ history }) {
   );
 }
 
-function SelectedPanel({ meta, onClose, onEditTags, selectedCount, torrent }) {
+function SelectedPanel({ meta, onClose, onEditTags, onReannounce, selectedCount, torrent }) {
   return (
     <>
       <div className="details-heading">
@@ -1154,6 +1240,7 @@ function SelectedPanel({ meta, onClose, onEditTags, selectedCount, torrent }) {
         <Detail label="Seeds / Peers" value={formatSeedPeerCount(torrent)} />
         <Detail label="Down speed" value={formatSpeed(torrent.dlspeed)} />
         <Detail label="Up speed" value={formatSpeed(torrent.upspeed)} />
+        <Detail label="ETA" value={formatEta(torrent.eta)} />
         <Detail label="Added" value={formatTimestamp(torrent.added_on)} />
         <Detail label="Completed" value={formatTimestamp(torrent.completion_on)} />
         <Detail label="Category" value={torrent.category || 'none'} />
@@ -1169,10 +1256,67 @@ function SelectedPanel({ meta, onClose, onEditTags, selectedCount, torrent }) {
         <code>{parseTags(torrent.tags).join(', ') || 'add tags'}</code>
       </button>
 
-      <DetailList title="Trackers" items={getTrackers(torrent, meta)} />
+      <TrackersSection
+        key={torrent.hash}
+        onReannounce={onReannounce}
+        trackers={getTrackers(torrent, meta)}
+      />
       <DetailList title="Peers" items={getPeers(meta)} />
       <DetailList title="Files" items={getFiles(torrent, meta).map(file => [file.name, formatBytes(file.size)])} />
     </>
+  );
+}
+
+function TrackersSection({ onReannounce, trackers }) {
+  const [expandedUrl, setExpandedUrl] = useState('');
+
+  return (
+    <section className="detail-section">
+      <header className="detail-section-head">
+        <h3>Trackers</h3>
+        <button className="detail-action" onClick={onReannounce} title="Force reannounce to all trackers" type="button">
+          Reannounce
+        </button>
+      </header>
+      <ul className="detail-list tracker-list">
+        {!trackers.length && (
+          <li className="tracker-empty">
+            <span>No trackers reported</span>
+            <strong>--</strong>
+          </li>
+        )}
+        {trackers.map(tracker => {
+          const expanded = tracker.url === expandedUrl;
+          const tone = trackerStatusTone(tracker);
+          return (
+            <li className={expanded ? 'expanded' : ''} key={tracker.url}>
+              <button
+                aria-expanded={expanded}
+                className="tracker-row"
+                onClick={() => setExpandedUrl(expanded ? '' : tracker.url)}
+                type="button"
+              >
+                <span>{tracker.url}</span>
+                <strong className={`tracker-status ${tone}`}>{trackerStatusLabel(tracker)}</strong>
+              </button>
+              {expanded && (
+                <div className="tracker-detail">
+                  <p className={`tracker-response ${tone}`}>
+                    {tracker.msg || 'No response message from this tracker.'}
+                  </p>
+                  <div className="tracker-detail-foot">
+                    <span>{formatTrackerCounts(tracker)}</span>
+                    <button className="detail-action" onClick={onReannounce} type="button">
+                      Force reannounce
+                    </button>
+                  </div>
+                </div>
+              )}
+            </li>
+          );
+        })}
+      </ul>
+    </section>
   );
 }
 
@@ -1398,7 +1542,6 @@ function countForFilter(torrents, filter) {
     if (filter === 'active') return isActive(torrent);
     if (filter === 'downloading') return isDownloading(torrent.state);
     if (filter === 'seeding') return isSeeding(torrent.state);
-    if (filter === 'paused') return isPaused(torrent.state);
     if (filter === 'stopped') return isStopped(torrent.state);
     if (filter === 'stalled') return isStalled(torrent.state);
     return false;
@@ -1465,16 +1608,31 @@ function normalizeSort(candidate) {
   return columnExists ? { key: candidate.key, direction } : fallback;
 }
 
+function normalizeFilter(candidate) {
+  // The standalone paused filter was folded into stopped.
+  if (candidate === 'paused') {
+    return 'stopped';
+  }
+  return FILTERS.some(filter => filter.key === candidate) ? candidate : 'all';
+}
+
+function normalizeTagFilters(state) {
+  if (Array.isArray(state.tagFilters)) {
+    return state.tagFilters.filter(tag => typeof tag === 'string' && tag);
+  }
+  // Migrate the legacy single-tag filter key.
+  if (typeof state.tagFilter === 'string' && state.tagFilter) {
+    return [state.tagFilter];
+  }
+  return [];
+}
+
 function isDownloading(state) {
   return ['downloading', 'metaDL', 'forcedDL', 'allocating'].includes(state);
 }
 
 function isSeeding(state) {
   return ['uploading', 'forcedUP', 'stalledUP', 'queuedUP'].includes(state);
-}
-
-function isPaused(state) {
-  return state && state.toLowerCase().indexOf('paused') !== -1;
 }
 
 function isStopped(state) {
@@ -1491,7 +1649,7 @@ function isActive(torrent) {
 }
 
 function statusTone(torrent) {
-  if (isPaused(torrent.state)) return 'muted';
+  if (isStopped(torrent.state)) return 'muted';
   if (isStalled(torrent.state)) return 'warning';
   if (isDownloading(torrent.state)) return 'active';
   if (isSeeding(torrent.state)) return 'seeding';
@@ -1512,9 +1670,11 @@ function formatStatus(torrentOrState) {
     metaDL: 'Metadata',
     missingFiles: 'Missing files',
     moving: 'Moving',
-    pausedDL: 'Paused',
-    pausedUP: 'Paused',
+    pausedDL: 'Stopped',
+    pausedUP: 'Stopped',
     queuedDL: 'Queued',
+    stoppedDL: 'Stopped',
+    stoppedUP: 'Stopped',
   };
   return labels[state] || String(state || 'Unknown').replace(/DL|UP/g, '');
 }
@@ -1557,6 +1717,24 @@ function formatSpeed(bytes) {
   return `${formatBytes(bytes)}/s`;
 }
 
+// qBittorrent reports 8640000 seconds (100 days) when the ETA is unknown/infinite.
+const ETA_INFINITY = 8640000;
+
+function formatEta(seconds) {
+  const value = Number(seconds);
+  if (!Number.isFinite(value) || value < 0 || value >= ETA_INFINITY) {
+    return '∞';
+  }
+  const days = Math.floor(value / 86400);
+  const hours = Math.floor((value % 86400) / 3600);
+  const minutes = Math.floor((value % 3600) / 60);
+  const secs = Math.floor(value % 60);
+  if (days > 0) return `${days}d ${hours}h`;
+  if (hours > 0) return `${hours}h ${minutes}m`;
+  if (minutes > 0) return `${minutes}m ${secs}s`;
+  return `${secs}s`;
+}
+
 function formatPercent(value) {
   return `${Math.round(Number(value || 0) * 100)}%`;
 }
@@ -1590,18 +1768,9 @@ function getTrackers(torrent, meta) {
   const normalized = (trackers || [])
     .map(tracker => normalizeTracker(tracker))
     .filter(tracker => tracker.url);
-  const visibleTrackers = torrent.private
+  return torrent.private
     ? normalized.filter(tracker => !isLocalDiscoveryTracker(tracker.url))
     : normalized;
-
-  if (!visibleTrackers.length) {
-    return [['No trackers reported', '--']];
-  }
-
-  return visibleTrackers.map(tracker => [
-    tracker.url,
-    trackerStatusLabel(tracker),
-  ]);
 }
 
 function normalizeTracker(tracker) {
@@ -1612,6 +1781,8 @@ function normalizeTracker(tracker) {
     url: tracker.url || tracker.msg || '',
     msg: tracker.msg || '',
     status: tracker.status,
+    num_seeds: tracker.num_seeds,
+    num_peers: tracker.num_peers,
   };
 }
 
@@ -1620,9 +1791,6 @@ function isLocalDiscoveryTracker(url) {
 }
 
 function trackerStatusLabel(tracker) {
-  if (tracker.msg && tracker.status !== 2) {
-    return tracker.msg;
-  }
   const labels = {
     0: 'disabled',
     1: 'not contacted',
@@ -1631,6 +1799,19 @@ function trackerStatusLabel(tracker) {
     4: 'not working',
   };
   return labels[tracker.status] || 'tracker';
+}
+
+function trackerStatusTone(tracker) {
+  if (tracker.status === 2) return 'ok';
+  if (tracker.status === 3) return 'warn';
+  if (tracker.status === 4) return 'error';
+  return 'muted';
+}
+
+function formatTrackerCounts(tracker) {
+  const seeds = Number.isFinite(tracker.num_seeds) && tracker.num_seeds >= 0 ? tracker.num_seeds : '?';
+  const peers = Number.isFinite(tracker.num_peers) && tracker.num_peers >= 0 ? tracker.num_peers : '?';
+  return `seeds ${seeds} / peers ${peers}`;
 }
 
 function getPeers(meta) {

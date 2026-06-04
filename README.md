@@ -21,51 +21,90 @@ Dark, terminal-inspired qBittorrent WebUI built with React. The interface keeps 
 ## Features
 
 - Custom dark qBittorrent WebUI with configurable accent color.
-- Torrent filters for all, active, downloading, seeding, paused, stalled, and tags.
-- Sortable torrent table with status, progress, speed, ratio, and added date.
-- Multi-select with Shift, Cmd, or Ctrl for resume, pause, and remove actions.
-- Add modal for `.torrent` uploads and magnet/URL paste.
-- Selected torrent panel with files, trackers, save path, category, and quick tag editing.
+- Torrent filters for all, active, downloading, seeding, stopped, and stalled, plus category filters and multi-select tag filters with counts.
+- Sortable torrent table with status, progress, speed, ratio, and added date, with a sticky header and toolbar.
+- Multi-select with Shift, Cmd, or Ctrl for resume, stop, recheck, and remove actions.
+- Remove confirmation modal with an optional `Delete downloaded data` checkbox.
+- Add modal accepting multiple `.torrent` files and magnet/URL paste, with tags at add time and an `Add stopped` option for import workflows (add stopped, recheck, then resume).
+- Selected torrent panel with ETA, files, peers, save path, category, and quick tag editing.
+- Tracker list with per-tracker status; click a tracker to expand its latest response message and force a reannounce.
 - Settings modal with qBittorrent preferences, advanced settings, compact mode, ratio progress toggle, and default WebUI revert action.
-- Release pipeline that builds `build/public`, wraps it as `qbitctl-<version>/public/`, and uploads `qbitctl-<version>.zip`.
+- UI state (filters, search, sort, and appearance settings) persists across sessions in browser local storage.
+- Modals close on backdrop click.
+- Compatible with old and new qBittorrent API endpoints (`torrents/start` with fallback to `torrents/resume`).
+- Release pipeline that builds `build/public`, wraps it as `qbitctl-<version>/public/`, and uploads `qbitctl-<version>.zip` plus a stable-URL `qbitctl-latest.zip`.
 
 ## Install From A Release
 
-1. Download `qbitctl-<version>.zip` from the GitHub release.
-2. Unzip it somewhere qBittorrent can read, for example:
+Every release ships a versioned `qbitctl-<version>.zip` plus a fixed-name `qbitctl-latest.zip` that extracts to a stable `qbitctl-latest/` folder. The latest zip is always available at the same URL, so installing and updating is the same two commands:
 
-   ```bash
-   unzip qbitctl-1.0.7.zip -d /opt/qbittorrent-webuis
-   ```
+```bash
+curl -fL -o qbitctl-latest.zip \
+  https://github.com/mstraa/qbitctl-webui/releases/latest/download/qbitctl-latest.zip
+rm -rf /opt/qbittorrent-webuis/qbitctl-latest && \
+  unzip -q qbitctl-latest.zip -d /opt/qbittorrent-webuis
+```
 
-3. In qBittorrent, open `Tools -> Options -> Web UI`.
-4. Enable `Use alternative WebUI`.
-5. Set the WebUI path to the extracted `qbitctl-<version>/public` folder.
-6. Apply the settings and reload the qBittorrent WebUI.
+First-time setup:
+
+1. Run the commands above (pick any folder qBittorrent can read instead of `/opt/qbittorrent-webuis`).
+2. In qBittorrent, open `Tools -> Options -> Web UI`.
+3. Enable `Use alternative WebUI`.
+4. Set the WebUI path to the extracted `qbitctl-latest/public` folder (or `qbitctl-<version>/public` if you prefer pinned versions).
+5. Apply the settings and reload the qBittorrent WebUI.
+
+To update later, just re-run the curl + unzip commands and reload the WebUI — the path stays the same.
 
 To revert, open qbitctl settings and use `Revert to default qBittorrent WebUI`, or disable `Use alternative WebUI` in qBittorrent.
 
 ## Build It Yourself
 
-This project uses Yarn and an older Create React App/Webpack stack. Node 18 works with the legacy OpenSSL flag.
+### Requirements
+
+- Node 18 (the version used by CI; anything from Node 17 up needs the legacy OpenSSL flag shown below because of the older Webpack 4 stack)
+- Yarn 1.x (classic)
+
+### Setup
 
 ```bash
+git clone https://github.com/mstraa/qbitctl.git
+cd qbitctl
 yarn install --frozen-lockfile
+```
+
+### Local development
+
+```bash
+NODE_OPTIONS=--openssl-legacy-provider yarn start
+```
+
+This starts the dev server on `http://localhost:3000` (set `PORT` to change it). Without a reachable qBittorrent API the UI falls back to built-in preview data, so you can develop the interface without a running qBittorrent instance.
+
+Run the tests with:
+
+```bash
+yarn test --watchAll=false
+```
+
+### Build and package
+
+```bash
 NODE_OPTIONS=--openssl-legacy-provider yarn build
 yarn package:release
 ```
 
-The packaged file will be created at:
+`yarn build` outputs the WebUI to `build/public`. `yarn package:release` wraps it and creates:
 
 ```text
 dist/qbitctl-<version>.zip
+dist/qbitctl-latest.zip
 ```
 
-The zip contains a top-level `qbitctl-<version>/` folder with the built WebUI under `public/`. Point qBittorrent's alternative WebUI path at `qbitctl-<version>/public`.
+The version defaults to the one in `package.json`; pass one explicitly with `yarn package:release 1.1.0`. Each zip contains a top-level folder (`qbitctl-<version>/` or `qbitctl-latest/`) with the built WebUI under `public/`. Point qBittorrent's alternative WebUI path at that `public` folder (see [Install From A Release](#install-from-a-release)).
 
 ## Release Pipeline
 
-The GitHub Actions workflow in `.github/workflows/release.yml` runs tests, builds the WebUI, packages `build/public`, and uploads the zip.
+The GitHub Actions workflow in `.github/workflows/release.yml` runs tests, builds the WebUI, packages `build/public`, and uploads both `qbitctl-<version>.zip` and `qbitctl-latest.zip`. Tagged releases are marked as the latest release, so the `releases/latest/download/qbitctl-latest.zip` URL always serves the newest version.
 
 Create a release by pushing a version tag:
 

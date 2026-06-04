@@ -803,6 +803,127 @@ dd {
   white-space: nowrap;
 }
 
+.detail-section-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding-right: 10px;
+  border-bottom: 1px solid var(--line);
+}
+
+.detail-section-head h3 {
+  border-bottom: 0;
+}
+
+.detail-action {
+  min-height: 26px;
+  padding: 0 10px;
+  border: 1px solid var(--line);
+  background: #090909;
+  color: var(--muted);
+  font-family: "SFMono-Regular", Consolas, "Liberation Mono", monospace;
+  font-size: 11px;
+  text-transform: uppercase;
+  white-space: nowrap;
+  cursor: pointer;
+}
+
+.detail-action:hover {
+  border-color: var(--orange-dim);
+  background: #17110d;
+  color: var(--orange);
+}
+
+.tracker-list li {
+  display: block;
+  padding: 0;
+}
+
+.tracker-list li.tracker-empty {
+  display: flex;
+  padding: 9px 12px;
+}
+
+.tracker-row {
+  width: 100%;
+  display: flex;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 9px 12px;
+  border: 0;
+  background: none;
+  color: var(--muted);
+  font-family: "SFMono-Regular", Consolas, "Liberation Mono", monospace;
+  font-size: 12px;
+  text-align: left;
+  cursor: pointer;
+}
+
+.tracker-row:hover {
+  background: var(--panel-2);
+}
+
+.tracker-row span {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.tracker-status {
+  font-weight: 500;
+  white-space: nowrap;
+}
+
+.tracker-status.ok {
+  color: var(--green);
+}
+
+.tracker-status.warn {
+  color: var(--amber);
+}
+
+.tracker-status.error {
+  color: var(--red);
+}
+
+.tracker-status.muted {
+  color: var(--muted);
+}
+
+.tracker-detail {
+  display: grid;
+  gap: 10px;
+  padding: 10px 12px 12px;
+  border-top: 1px dashed var(--line);
+  background: var(--panel-2);
+  font-family: "SFMono-Regular", Consolas, "Liberation Mono", monospace;
+  font-size: 12px;
+}
+
+.tracker-response {
+  margin: 0;
+  color: var(--text);
+  overflow-wrap: anywhere;
+}
+
+.tracker-response.ok {
+  color: var(--green);
+}
+
+.tracker-response.error {
+  color: var(--red);
+}
+
+.tracker-detail-foot {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  color: var(--muted);
+}
+
 .settings-overlay {
   position: fixed;
   inset: 0;
