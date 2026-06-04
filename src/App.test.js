@@ -191,6 +191,75 @@ test('settings toggle hides the version button', async () => {
   expect(queryByTitle('Version details')).toBeNull();
 });
 
+function mockAuthenticatedApi() {
+  const state = { authed: false };
+  global.fetch.mockImplementation((url, options) => {
+    const u = String(url);
+    if (u.includes('/api/v2/auth/login')) {
+      const body = String(options && options.body);
+      state.authed = body.includes('password=goodpass');
+      return Promise.resolve({
+        ok: true,
+        status: 200,
+        text: () => Promise.resolve(state.authed ? 'Ok.' : 'Fails.'),
+      });
+    }
+    if (u.includes('/api/v2/auth/logout')) {
+      state.authed = false;
+      return Promise.resolve({ ok: true, status: 200, text: () => Promise.resolve('') });
+    }
+    if (u.includes('/api/v2/torrents/info')) {
+      return state.authed
+        ? Promise.resolve({
+            ok: true,
+            status: 200,
+            json: () => Promise.resolve([{
+              hash: 'live1', name: 'live-torrent', state: 'downloading', progress: 0.5,
+              dlspeed: 100, upspeed: 10, size: 1000, downloaded: 500, uploaded: 100,
+              ratio: 0.1, num_seeds: 1, num_leechs: 1, category: '', save_path: '/data',
+              tags: '', added_on: 1700000000, completion_on: 0, eta: 60,
+            }]),
+          })
+        : Promise.resolve({ ok: false, status: 403, json: () => Promise.resolve({}) });
+    }
+    return Promise.reject(new Error('offline'));
+  });
+  return state;
+}
+
+test('shows the login page when qBittorrent requires authentication', async () => {
+  mockAuthenticatedApi();
+  const { findByText, getByLabelText, queryByText } = render(<App />);
+
+  expect(await findByText('qBittorrent WebUI login')).toBeInTheDocument();
+  expect(getByLabelText('Username')).toBeInTheDocument();
+  expect(getByLabelText('Password')).toBeInTheDocument();
+  // No preview fallback while authentication is pending.
+  expect(queryByText('archlinux-2026.05.01-x86_64.iso')).toBeNull();
+});
+
+test('rejected credentials show an error, valid ones enter live mode, logout returns to login', async () => {
+  mockAuthenticatedApi();
+  const { findByText, getByLabelText, getByText } = render(<App />);
+  await findByText('qBittorrent WebUI login');
+
+  // Wrong password -> error message, still on the login page.
+  fireEvent.change(getByLabelText('Username'), { target: { value: 'admin' } });
+  fireEvent.change(getByLabelText('Password'), { target: { value: 'badpass' } });
+  fireEvent.click(getByText('Log in'));
+  expect(await findByText('Invalid username or password.')).toBeInTheDocument();
+
+  // Correct password -> live torrents replace the login page.
+  fireEvent.change(getByLabelText('Password'), { target: { value: 'goodpass' } });
+  fireEvent.click(getByText('Log in'));
+  expect(await findByText('live-torrent')).toBeInTheDocument();
+
+  // Logout from settings returns to the login page.
+  fireEvent.click(getByLabelText('Settings'));
+  fireEvent.click(getByText('Log out of qBittorrent'));
+  expect(await findByText('qBittorrent WebUI login')).toBeInTheDocument();
+});
+
 test('add modal accepts multiple torrent files and tags', async () => {
   const { findByLabelText, findByText, getByLabelText, getByText } = render(<App />);
   await findByText('archlinux-2026.05.01-x86_64.iso');
@@ -200,6 +269,8 @@ test('add modal accepts multiple torrent files and tags', async () => {
   expect(getByText('Add torrents')).toBeInTheDocument();
   expect(getByText('Torrent files').closest('label').querySelector('input[type="file"]'))
     .toHaveAttribute('multiple');
+  // English trigger replaces the browser-locale native file widget.
+  expect(getByText('Browse files')).toBeInTheDocument();
   expect(getByText('Tags').closest('label').querySelector('input[type="text"]')).toBeInTheDocument();
   expect(getByText('Add stopped')).toBeInTheDocument();
 

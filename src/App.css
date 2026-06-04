@@ -142,6 +142,97 @@ button {
   text-transform: uppercase;
 }
 
+.login-shell {
+  height: 100vh;
+  display: grid;
+  place-items: center;
+  background:
+    linear-gradient(rgba(255, 255, 255, 0.025) 1px, transparent 1px),
+    linear-gradient(90deg, rgba(255, 255, 255, 0.018) 1px, transparent 1px),
+    var(--bg);
+  background-size: 28px 28px;
+  color: var(--text);
+}
+
+.login-card {
+  width: min(380px, calc(100vw - 28px));
+  display: grid;
+  gap: 14px;
+  padding: 22px;
+  border: 1px solid var(--line-strong);
+  background: rgba(16, 16, 16, 0.96);
+  box-shadow: 0 24px 80px rgba(0, 0, 0, 0.55);
+}
+
+.login-row {
+  display: grid;
+  gap: 6px;
+}
+
+.login-row span {
+  color: var(--muted);
+  font-family: "SFMono-Regular", Consolas, "Liberation Mono", monospace;
+  font-size: 11px;
+  text-transform: uppercase;
+}
+
+.login-row input {
+  min-height: 36px;
+  padding: 0 10px;
+  border: 1px solid var(--line);
+  background: #090909;
+  color: var(--text);
+}
+
+.login-row input:focus {
+  outline: none;
+  border-color: var(--orange-dim);
+}
+
+.login-error {
+  margin: 0;
+  color: var(--red);
+  font-family: "SFMono-Regular", Consolas, "Liberation Mono", monospace;
+  font-size: 12px;
+  overflow-wrap: anywhere;
+}
+
+.login-submit {
+  min-height: 38px;
+  border: 1px solid var(--orange-dim);
+  background: #17110d;
+  color: var(--orange);
+  cursor: pointer;
+  transition: border-color 140ms ease;
+}
+
+.login-submit:hover {
+  border-color: var(--orange);
+}
+
+.login-submit:disabled {
+  opacity: 0.6;
+  cursor: default;
+}
+
+.logout-button {
+  width: 100%;
+  margin-top: 10px;
+  min-height: 36px;
+  padding: 0 12px;
+  border: 1px solid var(--line-strong);
+  background: #090909;
+  color: var(--muted);
+  cursor: pointer;
+  font-family: "SFMono-Regular", Consolas, "Liberation Mono", monospace;
+  font-size: 12px;
+}
+
+.logout-button:hover {
+  border-color: rgba(255, 107, 95, 0.55);
+  color: var(--red);
+}
+
 .version-button {
   display: flex;
   align-items: center;
@@ -1238,22 +1329,39 @@ dd {
 }
 
 .add-file-row {
+  position: relative;
   grid-template-columns: minmax(0, 1fr) auto;
 }
 
+/* Visually hidden but still focusable/clickable through the label, so the
+   browser's locale-dependent file widget never shows. */
 .add-file-row input[type="file"] {
-  width: 100%;
-  color: var(--muted);
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  opacity: 0;
+  overflow: hidden;
+  clip: rect(0 0 0 0);
 }
 
-.add-file-row input[type="file"]::file-selector-button {
+.add-file-row .file-trigger {
+  justify-self: end;
+  display: inline-flex;
+  align-items: center;
   min-height: 30px;
-  margin-right: 10px;
+  padding: 0 12px;
   border: 1px solid var(--line-strong);
   background: #090909;
   color: var(--orange);
   cursor: pointer;
   font-family: "SFMono-Regular", Consolas, "Liberation Mono", monospace;
+  font-size: 12px;
+  white-space: nowrap;
+}
+
+.add-file-row:hover .file-trigger,
+.add-file-row:focus-within .file-trigger {
+  border-color: var(--orange);
 }
 
 .add-file-row strong {

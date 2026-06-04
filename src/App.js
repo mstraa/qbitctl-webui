@@ -210,6 +210,9 @@ function App() {
   const [versionModalOpen, setVersionModalOpen] = useState(false);
   const [latestRelease, setLatestRelease] = useState({ version: '', notes: '', url: '', checked: false });
   const [qbtVersion, setQbtVersion] = useState('');
+  const [loginError, setLoginError] = useState('');
+  const [loginBusy, setLoginBusy] = useState(false);
+  const [authNonce, setAuthNonce] = useState(0);
 
   const appVersion = process.env.REACT_APP_VERSION || '0.0.0';
   const updateAvailable = latestRelease.checked && isNewerVersion(latestRelease.version, appVersion);
@@ -224,6 +227,14 @@ function App() {
     async function loadTorrents() {
       try {
         const response = await fetch('/api/v2/torrents/info', { credentials: 'same-origin' });
+        if (response.status === 401 || response.status === 403) {
+          // qBittorrent requires authentication: show the login page rather
+          // than falling back to preview data.
+          if (isMounted) {
+            enterAuthMode();
+          }
+          return;
+        }
         if (!response.ok) {
           throw new Error('qBittorrent API unavailable');
         }
@@ -250,7 +261,9 @@ function App() {
       isMounted = false;
       window.clearInterval(refresh);
     };
-  }, [primaryHash]);
+    // enterAuthMode only calls stable state setters, so it is safe to omit.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [primaryHash, authNonce]);
 
   useEffect(() => {
     if (status !== 'live') {
@@ -612,8 +625,7 @@ function App() {
     };
 
     if (status !== 'live') {
-      setStatus('preview action');
-      window.setTimeout(() => setStatus('preview'), 1200);
+      flashPreviewAction();
       return;
     }
 
@@ -622,13 +634,72 @@ function App() {
     postFirstAvailable(actionMap[action], body);
   }
 
+  // Briefly flag preview-mode actions. The timeout only downgrades the flash
+  // itself, so a concurrent switch to another status (e.g. auth) sticks.
+  function flashPreviewAction() {
+    setStatus('preview action');
+    window.setTimeout(() => {
+      setStatus(current => (current === 'preview action' ? 'preview' : current));
+    }, 1200);
+  }
+
+  function logIn(username, password) {
+    if (loginBusy) {
+      return;
+    }
+    setLoginBusy(true);
+    setLoginError('');
+    fetch('/api/v2/auth/login', {
+      method: 'POST',
+      credentials: 'same-origin',
+      headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+      body: new URLSearchParams({ username, password }),
+    })
+      .then(async response => {
+        const text = (await response.text().catch(() => '')).trim();
+        if (response.ok && text.toLowerCase().startsWith('ok')) {
+          setStatus('connecting');
+          setAuthNonce(nonce => nonce + 1);
+          return;
+        }
+        if (response.status === 403) {
+          // qBittorrent bans the IP after repeated failures and explains why.
+          setLoginError(text || 'Too many failed attempts; qBittorrent banned this IP for a while.');
+          return;
+        }
+        setLoginError('Invalid username or password.');
+      })
+      .catch(() => setLoginError('Could not reach the qBittorrent API.'))
+      .finally(() => setLoginBusy(false));
+  }
+
+  function logOut() {
+    fetch('/api/v2/auth/logout', { method: 'POST', credentials: 'same-origin' })
+      .catch(() => {})
+      .finally(() => enterAuthMode());
+  }
+
+  // Entered on explicit logout and on mid-session expiry (401/403 from the
+  // poll): close every modal and drop session data so nothing stale
+  // reappears after the next login.
+  function enterAuthMode() {
+    setSettingsOpen(false);
+    closeAddModal();
+    setRemoveOpen(false);
+    setTagEditorOpen(false);
+    setVersionModalOpen(false);
+    clearSelection();
+    setTorrents([]);
+    setLoginError('');
+    setStatus('auth');
+  }
+
   function reannounceTorrent(hash) {
     if (!hash) {
       return;
     }
     if (status !== 'live') {
-      setStatus('preview action');
-      window.setTimeout(() => setStatus('preview'), 1200);
+      flashPreviewAction();
       return;
     }
     postFirstAvailable(['/api/v2/torrents/reannounce'], new URLSearchParams({ hashes: hash }));
@@ -660,8 +731,7 @@ function App() {
     }
 
     if (status !== 'live') {
-      setStatus('preview action');
-      window.setTimeout(() => setStatus('preview'), 1200);
+      flashPreviewAction();
       setRemoveOpen(false);
       return;
     }
@@ -835,6 +905,17 @@ function App() {
   }
 
   const showDetailsPanel = Boolean(selectedTorrent);
+
+  if (status === 'auth') {
+    return (
+      <LoginPage
+        accent={settings.ui_accent_color || '#f07b24'}
+        busy={loginBusy}
+        error={loginError}
+        onLogin={logIn}
+      />
+    );
+  }
 
   return (
     <div
@@ -1051,6 +1132,7 @@ function App() {
         <SettingsPanel
           notice={notice}
           onClose={() => setSettingsOpen(false)}
+          onLogout={logOut}
           onRevert={revertWebUI}
           onSave={saveSettings}
           onUpdate={updateSetting}
@@ -1115,6 +1197,55 @@ function overlayClose(event, onClose) {
   if (event.target === event.currentTarget) {
     onClose();
   }
+}
+
+function LoginPage({ accent, busy, error, onLogin }) {
+  const [username, setUsername] = useState('');
+  const [password, setPassword] = useState('');
+
+  function handleSubmit(event) {
+    event.preventDefault();
+    onLogin(username.trim(), password);
+  }
+
+  return (
+    <div className="login-shell" style={{ '--orange': accent }}>
+      <form className="login-card" onSubmit={handleSubmit}>
+        <div className="brand">
+          <span className="prompt-mark">qb</span>
+          <div>
+            <h1>qbitctl</h1>
+            <p>qBittorrent WebUI login</p>
+          </div>
+        </div>
+        <span className="eyebrow">/api/v2/auth/login</span>
+        <label className="login-row">
+          <span>Username</span>
+          <input
+            autoComplete="username"
+            autoFocus
+            onChange={event => setUsername(event.target.value)}
+            type="text"
+            value={username}
+          />
+        </label>
+        <label className="login-row">
+          <span>Password</span>
+          <input
+            autoComplete="current-password"
+            onChange={event => setPassword(event.target.value)}
+            type="password"
+            value={password}
+          />
+        </label>
+        {error && <p className="login-error" role="alert">{error}</p>}
+        <button className="login-submit" disabled={busy} type="submit">
+          {busy ? 'Logging in...' : 'Log in'}
+        </button>
+        <p className="settings-hint">Uses your qBittorrent WebUI credentials.</p>
+      </form>
+    </div>
+  );
 }
 
 function VersionModal({ currentVersion, latestRelease, onClose, qbtVersion, updateAvailable }) {
@@ -1226,6 +1357,9 @@ function AddTorrentModal({ allTags, files, magnet, notice, onClose, onFiles, onM
         <div className="settings-body">
           <label className="setting-row wide add-file-row">
             <span>Torrent files</span>
+            {/* The native file widget renders in the browser locale, so it is
+                visually hidden behind an English trigger. */}
+            <span aria-hidden="true" className="file-trigger">Browse files</span>
             <input
               accept=".torrent,application/x-bittorrent"
               multiple
@@ -1530,7 +1664,7 @@ function TagEditor({ allTags, draft, onClose, onSave, onUpdate, selectedCount })
   );
 }
 
-function SettingsPanel({ notice, onClose, onRevert, onSave, onUpdate, settings, status }) {
+function SettingsPanel({ notice, onClose, onLogout, onRevert, onSave, onUpdate, settings, status }) {
   const [advancedOpen, setAdvancedOpen] = useState(false);
   const advancedSettings = Object.entries(settings).sort(([left], [right]) => left.localeCompare(right));
   return (
@@ -1596,6 +1730,9 @@ function SettingsPanel({ notice, onClose, onRevert, onSave, onUpdate, settings, 
             <h3>Access</h3>
             <label className="setting-row"><span>Web UI port</span><input onChange={event => onUpdate('web_ui_port', event.target.value)} type="number" value={settings.web_ui_port || ''} /></label>
             <label className="setting-row"><span>Bypass auth for localhost</span><input checked={Boolean(settings.bypass_local_auth)} onChange={event => onUpdate('bypass_local_auth', event.target.checked)} type="checkbox" /></label>
+            {status === 'live' && (
+              <button className="logout-button" onClick={onLogout} type="button">Log out of qBittorrent</button>
+            )}
           </section>
 
           <section className="settings-section">
