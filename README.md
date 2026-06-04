@@ -30,6 +30,7 @@ Dark, terminal-inspired qBittorrent WebUI built with React. The interface keeps 
 - Tracker list with per-tracker status; click a tracker to expand its latest response message and force a reannounce.
 - Settings modal with qBittorrent preferences, advanced settings, compact mode, ratio progress toggle, and default WebUI revert action.
 - UI state (filters, search, sort, and appearance settings) persists across sessions in browser local storage.
+- Sidebar version button (checked once per page load against GitHub releases) highlights available updates and opens a changelog modal with the release link and qBittorrent version; can be hidden in settings.
 - Modals close on backdrop click.
 - Compatible with old and new qBittorrent API endpoints (`torrents/start` with fallback to `torrents/resume`).
 - Release pipeline that builds `build/public`, uploads `qbitctl-<version>.zip`, and keeps a rolling `latest` tag/release serving `qbitctl-latest.zip` from a stable URL.

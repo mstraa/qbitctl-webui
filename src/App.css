@@ -142,9 +142,10 @@ button {
   text-transform: uppercase;
 }
 
-.connection {
+.version-button {
   display: flex;
   align-items: center;
+  justify-content: space-between;
   gap: 9px;
   min-height: 36px;
   padding: 0 12px;
@@ -153,24 +154,27 @@ button {
   color: var(--muted);
   font-family: "SFMono-Regular", Consolas, "Liberation Mono", monospace;
   font-size: 12px;
+  cursor: pointer;
+  transition: border-color 140ms ease, background 140ms ease, color 140ms ease;
 }
 
-.connection-dot {
-  width: 8px;
-  height: 8px;
-  background: var(--amber);
-  box-shadow: 0 0 16px rgba(240, 178, 77, 0.35);
+.version-button:hover {
+  border-color: var(--line-strong);
+  color: var(--text);
 }
 
-.connection.live .connection-dot {
-  background: var(--orange);
-  box-shadow: 0 0 16px color-mix(in srgb, var(--orange) 45%, transparent);
+.version-button.update-available {
+  border-color: var(--orange-dim);
+  background: #17110d;
+  color: var(--orange);
 }
 
-.connection.preview .connection-dot,
-.connection.preview-action .connection-dot {
-  background: var(--orange);
-  box-shadow: 0 0 16px rgba(240, 123, 36, 0.35);
+.version-button.update-available:hover {
+  border-color: var(--orange);
+}
+
+.version-button strong {
+  font-weight: 500;
 }
 
 .filter-list {
@@ -973,6 +977,60 @@ dd {
 
 .remove-modal {
   width: min(520px, calc(100vw - 28px));
+}
+
+.version-modal {
+  width: min(620px, calc(100vw - 28px));
+}
+
+.version-list {
+  border: 1px solid var(--line);
+  background: var(--panel);
+}
+
+.changelog {
+  margin-top: 14px;
+  border: 1px solid var(--line);
+  background: var(--panel);
+}
+
+.changelog h3 {
+  margin: 0;
+  padding: 10px 12px;
+  border-bottom: 1px solid var(--line);
+  color: var(--text);
+  font-size: 12px;
+  text-transform: uppercase;
+}
+
+.changelog pre {
+  margin: 0;
+  padding: 12px;
+  max-height: 240px;
+  overflow: auto;
+  color: var(--muted);
+  font-family: "SFMono-Regular", Consolas, "Liberation Mono", monospace;
+  font-size: 12px;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}
+
+.release-link {
+  display: inline-flex;
+  align-items: center;
+  margin-top: 14px;
+  min-height: 32px;
+  padding: 0 12px;
+  border: 1px solid var(--orange-dim);
+  background: #17110d;
+  color: var(--orange);
+  font-family: "SFMono-Regular", Consolas, "Liberation Mono", monospace;
+  font-size: 12px;
+  text-decoration: none;
+}
+
+.release-link:hover {
+  border-color: var(--orange);
 }
 
 .danger-row {

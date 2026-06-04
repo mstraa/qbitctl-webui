@@ -147,6 +147,7 @@ const DEFAULT_SETTINGS = {
   ui_show_category_filters: true,
   ui_show_tag_filters: true,
   ui_show_ratio_progress: true,
+  ui_show_version_button: true,
   ui_table_density: 'normal',
 };
 
@@ -156,8 +157,11 @@ const UI_SETTING_KEYS = [
   'ui_show_category_filters',
   'ui_show_tag_filters',
   'ui_show_ratio_progress',
+  'ui_show_version_button',
   'ui_table_density',
 ];
+
+const GITHUB_REPO = 'mstraa/qbitctl-webui';
 
 const COLUMNS = [
   { key: 'name', label: 'Name' },
@@ -203,6 +207,12 @@ function App() {
   const [selectedMeta, setSelectedMeta] = useState({});
   const [tagEditorOpen, setTagEditorOpen] = useState(false);
   const [tagDraft, setTagDraft] = useState('');
+  const [versionModalOpen, setVersionModalOpen] = useState(false);
+  const [latestRelease, setLatestRelease] = useState({ version: '', notes: '', url: '', checked: false });
+  const [qbtVersion, setQbtVersion] = useState('');
+
+  const appVersion = process.env.REACT_APP_VERSION || '0.0.0';
+  const updateAvailable = latestRelease.checked && isNewerVersion(latestRelease.version, appVersion);
 
   const selectedTorrent = primaryHash
     ? torrents.find(torrent => torrent.hash === primaryHash)
@@ -267,6 +277,48 @@ function App() {
       tagFilters,
     });
   }, [activeFilter, categoryFilter, query, sort, tagFilters]);
+
+  // Check the newest GitHub release once per page load; no periodic polling.
+  useEffect(() => {
+    let cancelled = false;
+    fetch(`https://api.github.com/repos/${GITHUB_REPO}/releases/latest`, {
+      headers: { Accept: 'application/vnd.github+json' },
+    })
+      .then(response => (response.ok ? response.json() : null))
+      .then(release => {
+        if (cancelled || !release || !release.tag_name) {
+          return;
+        }
+        setLatestRelease({
+          version: String(release.tag_name).replace(/^v/, ''),
+          notes: release.body || '',
+          url: release.html_url || `https://github.com/${GITHUB_REPO}/releases`,
+          checked: true,
+        });
+      })
+      .catch(() => {});
+    return () => {
+      cancelled = true;
+    };
+  }, []);
+
+  useEffect(() => {
+    if (status !== 'live' || qbtVersion) {
+      return;
+    }
+    let cancelled = false;
+    fetch('/api/v2/app/version', { credentials: 'same-origin' })
+      .then(response => (response.ok ? response.text() : ''))
+      .then(version => {
+        if (!cancelled && version) {
+          setQbtVersion(version);
+        }
+      })
+      .catch(() => {});
+    return () => {
+      cancelled = true;
+    };
+  }, [status, qbtVersion]);
 
   useEffect(() => {
     writeAppState({
@@ -800,10 +852,17 @@ function App() {
           </div>
         </div>
 
-        <div className={`connection ${status.replace(' ', '-')}`}>
-          <span className="connection-dot" />
-          <span>{status}</span>
-        </div>
+        {settings.ui_show_version_button !== false && (
+          <button
+            className={`version-button ${updateAvailable ? 'update-available' : ''}`}
+            onClick={() => setVersionModalOpen(true)}
+            title={updateAvailable ? `Update available: v${latestRelease.version}` : 'Version details'}
+            type="button"
+          >
+            <span>v{appVersion}</span>
+            {updateAvailable && <strong>⇡ v{latestRelease.version}</strong>}
+          </button>
+        )}
 
         <nav className="filter-list" aria-label="Torrent filters">
           {FILTERS.map(filter => (
@@ -1038,6 +1097,16 @@ function App() {
           selectedCount={selectedCount}
         />
       )}
+
+      {versionModalOpen && (
+        <VersionModal
+          currentVersion={appVersion}
+          latestRelease={latestRelease}
+          onClose={() => setVersionModalOpen(false)}
+          qbtVersion={qbtVersion}
+          updateAvailable={updateAvailable}
+        />
+      )}
     </div>
   );
 }
@@ -1046,6 +1115,59 @@ function overlayClose(event, onClose) {
   if (event.target === event.currentTarget) {
     onClose();
   }
+}
+
+function VersionModal({ currentVersion, latestRelease, onClose, qbtVersion, updateAvailable }) {
+  return (
+    <div className="settings-overlay tag-overlay" onClick={event => overlayClose(event, onClose)} role="dialog" aria-modal="true" aria-labelledby="version-title">
+      <section className="tag-modal version-modal">
+        <header className="settings-head">
+          <div>
+            <span className="eyebrow">github.com/{GITHUB_REPO}</span>
+            <h2 id="version-title">Version</h2>
+          </div>
+          <button className="icon-close" onClick={onClose} type="button">x</button>
+        </header>
+        <div className="settings-body">
+          <ul className="detail-list version-list">
+            <li>
+              <span>WebUI version</span>
+              <strong>v{currentVersion}</strong>
+            </li>
+            <li>
+              <span>Latest release</span>
+              <strong>{latestRelease.checked ? `v${latestRelease.version}` : 'unknown'}</strong>
+            </li>
+            <li>
+              <span>qBittorrent</span>
+              <strong>{qbtVersion || 'unknown'}</strong>
+            </li>
+          </ul>
+          <section className="changelog" aria-label="Release changelog">
+            <h3>{latestRelease.checked ? `Changelog v${latestRelease.version}` : 'Changelog'}</h3>
+            <pre>{latestRelease.notes || 'No release notes available.'}</pre>
+          </section>
+          {latestRelease.url && (
+            <a className="release-link" href={latestRelease.url} rel="noopener noreferrer" target="_blank">
+              Open release on GitHub
+            </a>
+          )}
+        </div>
+        <footer className="settings-footer">
+          <span>
+            {!latestRelease.checked
+              ? 'Could not reach GitHub to check for updates.'
+              : updateAvailable
+                ? `Update available: v${latestRelease.version}`
+                : 'You are on the latest version.'}
+          </span>
+          <div>
+            <button onClick={onClose} type="button">Close</button>
+          </div>
+        </footer>
+      </section>
+    </div>
+  );
 }
 
 function RemoveTorrentModal({ deleteData, onClose, onConfirm, onDeleteData, selectedCount }) {
@@ -1459,6 +1581,10 @@ function SettingsPanel({ notice, onClose, onRevert, onSave, onUpdate, settings, 
               <span>Tag filters</span>
               <input checked={settings.ui_show_tag_filters !== false} onChange={event => onUpdate('ui_show_tag_filters', event.target.checked)} type="checkbox" />
             </label>
+            <label className="setting-row">
+              <span>Version button</span>
+              <input checked={settings.ui_show_version_button !== false} onChange={event => onUpdate('ui_show_version_button', event.target.checked)} type="checkbox" />
+            </label>
             <label className="setting-row wide">
               <span>Table density</span>
               <select onChange={event => onUpdate('ui_table_density', event.target.value)} value={settings.ui_table_density || 'normal'}>
@@ -1615,6 +1741,21 @@ function normalizeSort(candidate) {
   const columnExists = COLUMNS.some(column => column.key === candidate.key);
   const direction = candidate.direction === 'desc' ? 'desc' : 'asc';
   return columnExists ? { key: candidate.key, direction } : fallback;
+}
+
+function isNewerVersion(candidate, current) {
+  if (!candidate || !current) {
+    return false;
+  }
+  const a = String(candidate).split('.').map(Number);
+  const b = String(current).split('.').map(Number);
+  for (let index = 0; index < Math.max(a.length, b.length); index += 1) {
+    const left = Number.isFinite(a[index]) ? a[index] : 0;
+    const right = Number.isFinite(b[index]) ? b[index] : 0;
+    if (left > right) return true;
+    if (left < right) return false;
+  }
+  return false;
 }
 
 function normalizeFilter(candidate) {

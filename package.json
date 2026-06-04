@@ -6,7 +6,7 @@
   "description": "A dark terminal-inspired qBittorrent WebUI.",
   "repository": {
     "type": "git",
-    "url": "https://github.com/mstraa/qbitctl.git"
+    "url": "https://github.com/mstraa/qbitctl-webui.git"
   },
   "dependencies": {
     "@babel/core": "7.9.0",

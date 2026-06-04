@@ -4,7 +4,23 @@ import App from './App';
 
 beforeEach(() => {
   window.localStorage.clear();
+  process.env.REACT_APP_VERSION = '1.2.0';
+  // Default: no network at all -> the app falls back to preview mode and the
+  // GitHub release check stays unresolved. Tests override this when needed.
+  jest.spyOn(global, 'fetch').mockImplementation(() => Promise.reject(new Error('offline')));
 });
+
+afterEach(() => {
+  jest.restoreAllMocks();
+});
+
+function mockFetchWithLatestRelease(release) {
+  global.fetch.mockImplementation(url =>
+    String(url).includes('api.github.com')
+      ? Promise.resolve({ ok: true, json: () => Promise.resolve(release) })
+      : Promise.reject(new Error('offline'))
+  );
+}
 
 test('renders qbitctl shell', () => {
   const { getByText } = render(<App />);
@@ -110,6 +126,69 @@ test('tracker rows expand to show the tracker response and reannounce action', a
   // Clicking again collapses the row.
   fireEvent.click(getByText('udp://tracker.internal.local:6969/announce'));
   expect(queryByText('Connection timed out')).toBeNull();
+});
+
+test('version button replaces the connection status and opens the version modal', async () => {
+  const { findByText, getByText, getByTitle, queryByText } = render(<App />);
+  await findByText('archlinux-2026.05.01-x86_64.iso');
+
+  // The old "live/preview" connection block is gone.
+  expect(queryByText('preview')).toBeNull();
+
+  const button = getByTitle('Version details');
+  expect(button).toHaveTextContent('v1.2.0');
+  expect(button).not.toHaveClass('update-available');
+
+  fireEvent.click(button);
+  expect(getByText('WebUI version')).toBeInTheDocument();
+  expect(getByText('qBittorrent')).toBeInTheDocument();
+  expect(getByText('No release notes available.')).toBeInTheDocument();
+  expect(getByText('Could not reach GitHub to check for updates.')).toBeInTheDocument();
+});
+
+test('version button highlights an available update with changelog and link', async () => {
+  mockFetchWithLatestRelease({
+    tag_name: 'v9.9.9',
+    body: 'Big new things',
+    html_url: 'https://github.com/mstraa/qbitctl-webui/releases/tag/v9.9.9',
+  });
+  const { findByText, getByText, getByTitle } = render(<App />);
+
+  await findByText('⇡ v9.9.9');
+  expect(getByTitle('Update available: v9.9.9')).toHaveClass('update-available');
+
+  fireEvent.click(getByTitle('Update available: v9.9.9'));
+  expect(getByText('Changelog v9.9.9')).toBeInTheDocument();
+  expect(getByText('Big new things')).toBeInTheDocument();
+  expect(getByText('Update available: v9.9.9')).toBeInTheDocument();
+  const link = getByText('Open release on GitHub');
+  expect(link).toHaveAttribute('href', 'https://github.com/mstraa/qbitctl-webui/releases/tag/v9.9.9');
+});
+
+test('matching latest release keeps the version button gray', async () => {
+  mockFetchWithLatestRelease({
+    tag_name: 'v1.2.0',
+    body: 'Current release',
+    html_url: 'https://github.com/mstraa/qbitctl-webui/releases/tag/v1.2.0',
+  });
+  const { findByText, getByTitle } = render(<App />);
+  await findByText('archlinux-2026.05.01-x86_64.iso');
+
+  const button = getByTitle('Version details');
+  expect(button).not.toHaveClass('update-available');
+  fireEvent.click(button);
+  expect(await findByText('You are on the latest version.')).toBeInTheDocument();
+});
+
+test('settings toggle hides the version button', async () => {
+  const { findByText, getByLabelText, getByText, getByTitle, queryByTitle } = render(<App />);
+  await findByText('archlinux-2026.05.01-x86_64.iso');
+  expect(getByTitle('Version details')).toBeInTheDocument();
+
+  fireEvent.click(getByLabelText('Settings'));
+  const toggle = getByText('Version button').closest('label').querySelector('input');
+  fireEvent.click(toggle);
+  expect(queryByTitle('Version details')).toBeNull();
 });
 
 test('add modal accepts multiple torrent files and tags', async () => {
