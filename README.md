@@ -33,17 +33,17 @@ Dark, terminal-inspired qBittorrent WebUI built with React. The interface keeps 
 - Sidebar version button (checked once per page load against GitHub releases) highlights available updates and opens a changelog modal with the release link and qBittorrent version; can be hidden in settings.
 - Modals close on backdrop click.
 - Compatible with old and new qBittorrent API endpoints (`torrents/start` with fallback to `torrents/resume`).
-- Release pipeline that builds `build/public`, uploads `qbitctl-<version>.zip`, and keeps a rolling `latest` tag/release serving `qbitctl-latest.zip` from a stable URL.
+- Release pipeline that builds `build/public`, generates a changelog, and uploads `qbitctl-<version>.zip` plus a stable-URL `qbitctl.zip`.
 
 ## Install From A Release
 
-Each version gets a numbered release with `qbitctl-<version>.zip`. A rolling `latest` tag moves to every new release and hosts `qbitctl-latest.zip`, which extracts to a stable `qbitctl-latest/` folder — so installing and updating is always the same two commands:
+Every release carries a versioned `qbitctl-<version>.zip` plus a fixed-name `qbitctl.zip` that extracts to a stable `qbitctl/` folder. GitHub's `releases/latest` alias always follows the newest release, so installing and updating is always the same two commands:
 
 ```bash
-curl -fL -o qbitctl-latest.zip \
-  https://github.com/mstraa/qbitctl-webui/releases/download/latest/qbitctl-latest.zip
-rm -rf /opt/qbittorrent-webuis/qbitctl-latest && \
-  unzip -q qbitctl-latest.zip -d /opt/qbittorrent-webuis
+curl -fL -o qbitctl.zip \
+  https://github.com/mstraa/qbitctl-webui/releases/latest/download/qbitctl.zip
+rm -rf /opt/qbittorrent-webuis/qbitctl && \
+  unzip -q qbitctl.zip -d /opt/qbittorrent-webuis
 ```
 
 First-time setup:
@@ -51,7 +51,7 @@ First-time setup:
 1. Run the commands above (pick any folder qBittorrent can read instead of `/opt/qbittorrent-webuis`).
 2. In qBittorrent, open `Tools -> Options -> Web UI`.
 3. Enable `Use alternative WebUI`.
-4. Set the WebUI path to the extracted `qbitctl-latest/public` folder (or `qbitctl-<version>/public` if you prefer pinned versions).
+4. Set the WebUI path to the extracted `qbitctl/public` folder (or `qbitctl-<version>/public` if you prefer pinned versions).
 5. Apply the settings and reload the qBittorrent WebUI.
 
 To update later, just re-run the curl + unzip commands and reload the WebUI — the path stays the same.
@@ -98,14 +98,14 @@ yarn package:release
 
 ```text
 dist/qbitctl-<version>.zip
-dist/qbitctl-latest.zip
+dist/qbitctl.zip
 ```
 
-The version defaults to the one in `package.json`; pass one explicitly with `yarn package:release 1.1.0`. Each zip contains a top-level folder (`qbitctl-<version>/` or `qbitctl-latest/`) with the built WebUI under `public/`. Point qBittorrent's alternative WebUI path at that `public` folder (see [Install From A Release](#install-from-a-release)).
+The version defaults to the one in `package.json`; pass one explicitly with `yarn package:release 1.3.0`. Each zip contains a top-level folder (`qbitctl-<version>/` or `qbitctl/`) with the built WebUI under `public/`. Point qBittorrent's alternative WebUI path at that `public` folder (see [Install From A Release](#install-from-a-release)).
 
 ## Release Pipeline
 
-The GitHub Actions workflow in `.github/workflows/release.yml` runs tests, builds the WebUI, packages `build/public`, and publishes `qbitctl-<version>.zip` on the numbered release. It then force-moves the rolling `latest` tag to the same commit and recreates its release with `qbitctl-latest.zip`, so `releases/download/latest/qbitctl-latest.zip` always serves the newest version.
+The GitHub Actions workflow in `.github/workflows/release.yml` runs tests, builds the WebUI, packages `build/public`, generates release notes from the commits since the previous version tag, and publishes both `qbitctl-<version>.zip` and the fixed-name `qbitctl.zip` on the release. Each release is marked latest, so `releases/latest/download/qbitctl.zip` always serves the newest version.
 
 Create a release by pushing a version tag:
 

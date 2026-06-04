@@ -24,6 +24,9 @@ jobs:
     steps:
       - name: Checkout
         uses: actions/checkout@v4
+        with:
+          # Full history and tags, needed to build the changelog between tags.
+          fetch-depth: 0
 
       - name: Setup Node
         uses: actions/setup-node@v4
@@ -50,7 +53,7 @@ jobs:
             VERSION="${GITHUB_REF_NAME#v}"
           fi
           ZIP_PATH="$(scripts/package-release.sh "$VERSION")"
-          LATEST_PATH="$(dirname "$ZIP_PATH")/qbitctl-latest.zip"
+          LATEST_PATH="$(dirname "$ZIP_PATH")/qbitctl.zip"
           echo "zip_path=$ZIP_PATH" >> "$GITHUB_OUTPUT"
           echo "zip_name=$(basename "$ZIP_PATH")" >> "$GITHUB_OUTPUT"
           echo "latest_path=$LATEST_PATH" >> "$GITHUB_OUTPUT"
@@ -61,26 +64,31 @@ jobs:
           name: ${{ steps.package.outputs.zip_name }}
           path: ${{ steps.package.outputs.zip_path }}
 
+      - name: Build changelog
+        if: startsWith(github.ref, 'refs/tags/')
+        id: changelog
+        run: |
+          PREV_TAG="$(git describe --tags --match 'v[0-9]*' --abbrev=0 "${GITHUB_REF_NAME}^" 2>/dev/null || true)"
+          {
+            echo 'body<<CHANGELOG_EOF'
+            if [ -n "$PREV_TAG" ]; then
+              git log --no-merges --pretty=format:'- %s' "${PREV_TAG}..${GITHUB_REF_NAME}"
+            else
+              git log --no-merges --pretty=format:'- %s' "${GITHUB_REF_NAME}"
+            fi
+            echo
+            echo 'CHANGELOG_EOF'
+          } >> "$GITHUB_OUTPUT"
+
       - name: Publish GitHub release
         if: startsWith(github.ref, 'refs/tags/')
         uses: softprops/action-gh-release@v2
         with:
+          # The fixed-name qbitctl.zip rides on every numbered release, so the
+          # "Latest"-badge alias URL is permanent:
+          # https://github.com/mstraa/qbitctl-webui/releases/latest/download/qbitctl.zip
           make_latest: true
-          files: ${{ steps.package.outputs.zip_path }}
-
-      - name: Update rolling latest release
-        if: startsWith(github.ref, 'refs/tags/')
-        env:
-          GH_TOKEN: ${{ github.token }}
-        run: |
-          # Move the rolling "latest" tag to this release commit and rebuild its
-          # release, so this URL always serves the newest build:
-          # https://github.com/mstraa/qbitctl-webui/releases/download/latest/qbitctl-latest.zip
-          gh release delete latest --yes || true
-          git push origin :refs/tags/latest || true
-          git tag -f latest
-          git push origin latest
-          gh release create latest "${{ steps.package.outputs.latest_path }}" \
-            --title "latest (${GITHUB_REF_NAME})" \
-            --latest=false \
-            --notes "Rolling release that always tracks the newest version, currently ${GITHUB_REF_NAME}. Stable download URL: https://github.com/${GITHUB_REPOSITORY}/releases/download/latest/qbitctl-latest.zip"
+          body: ${{ steps.changelog.outputs.body }}
+          files: |
+            ${{ steps.package.outputs.zip_path }}
+            ${{ steps.package.outputs.latest_path }}

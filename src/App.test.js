@@ -76,15 +76,15 @@ test('tag filters support multi-select with AND matching', async () => {
   expect(queryByText('archlinux-2026.05.01-x86_64.iso')).toBeInTheDocument();
 });
 
-test('activity graph labels the Y axis with max, half, and zero', async () => {
+test('activity graph labels the Y axis with only the peak value', async () => {
   const { findByLabelText, findByText } = render(<App />);
   await findByText('archlinux-2026.05.01-x86_64.iso');
   const graph = await findByLabelText('Last hour speed graph');
 
-  // Preview totals peak at 11.8 MB/s down -> axis shows "11M", half "5.6M", and 0.
+  // Preview totals peak at 11.8 MB/s down -> only the max label is shown.
   expect(within(graph).getByText('11M')).toBeInTheDocument();
-  expect(within(graph).getByText('5.6M')).toBeInTheDocument();
-  expect(within(graph).getByText('0')).toBeInTheDocument();
+  expect(within(graph).queryByText('5.6M')).toBeNull();
+  expect(within(graph).queryByText('0')).toBeNull();
 });
 
 test('legacy persisted state migrates paused filter and single tag', async () => {

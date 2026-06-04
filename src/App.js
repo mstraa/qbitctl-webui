@@ -1338,8 +1338,6 @@ function SpeedHistoryGraph({ history }) {
         </svg>
         <div className="speed-axis" aria-hidden="true">
           <span style={{ top: `${(2 / 38) * 100}%` }}>{dataMax ? formatAxisSpeed(dataMax) : '--'}</span>
-          <span style={{ top: `${(18 / 38) * 100}%` }}>{dataMax ? formatAxisSpeed(dataMax / 2) : '--'}</span>
-          <span style={{ top: `${(34 / 38) * 100}%` }}>0</span>
         </div>
       </div>
       <div className="speed-legend">

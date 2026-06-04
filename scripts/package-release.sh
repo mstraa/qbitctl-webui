@@ -31,7 +31,7 @@ cp -R "${ROOT_DIR}/build/public/." "${PUBLIC_DIR}/"
 
 # Also package a fixed-name copy with a stable top-level folder, so curl-based
 # updates can always fetch the same URL and extract to the same WebUI path.
-LATEST_NAME="qbitctl-latest"
+LATEST_NAME="qbitctl"
 cp -R "${PACKAGE_DIR}" "${DIST_DIR}/${LATEST_NAME}"
 
 (
