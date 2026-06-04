@@ -50,8 +50,10 @@ jobs:
             VERSION="${GITHUB_REF_NAME#v}"
           fi
           ZIP_PATH="$(scripts/package-release.sh "$VERSION")"
+          LATEST_PATH="$(dirname "$ZIP_PATH")/qbitctl-latest.zip"
           echo "zip_path=$ZIP_PATH" >> "$GITHUB_OUTPUT"
           echo "zip_name=$(basename "$ZIP_PATH")" >> "$GITHUB_OUTPUT"
+          echo "latest_path=$LATEST_PATH" >> "$GITHUB_OUTPUT"
 
       - name: Upload workflow artifact
         uses: actions/upload-artifact@v4
@@ -63,4 +65,10 @@ jobs:
         if: startsWith(github.ref, 'refs/tags/')
         uses: softprops/action-gh-release@v2
         with:
-          files: ${{ steps.package.outputs.zip_path }}
+          # make_latest keeps /releases/latest pointing at this release, and the
+          # fixed-name qbitctl-latest.zip asset gives a stable download URL:
+          # https://github.com/mstraa/qbitctl-webui/releases/latest/download/qbitctl-latest.zip
+          make_latest: true
+          files: |
+            ${{ steps.package.outputs.zip_path }}
+            ${{ steps.package.outputs.latest_path }}
