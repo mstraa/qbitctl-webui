@@ -147,7 +147,8 @@ const DEFAULT_SETTINGS = {
   ui_show_category_filters: true,
   ui_show_tag_filters: true,
   ui_show_ratio_progress: true,
-  ui_show_version_button: true,
+  // Opt-in: while disabled (the default) no GitHub request is ever made.
+  ui_version_check_enabled: false,
   ui_table_density: 'normal',
 };
 
@@ -157,7 +158,7 @@ const UI_SETTING_KEYS = [
   'ui_show_category_filters',
   'ui_show_tag_filters',
   'ui_show_ratio_progress',
-  'ui_show_version_button',
+  'ui_version_check_enabled',
   'ui_table_density',
 ];
 
@@ -291,8 +292,13 @@ function App() {
     });
   }, [activeFilter, categoryFilter, query, sort, tagFilters]);
 
-  // Check the newest GitHub release once per page load; no periodic polling.
+  // The GitHub release check is opt-in: while the version button is disabled
+  // (the default) no request is made at all. When enabled it runs at most
+  // once per page load; no periodic polling.
   useEffect(() => {
+    if (!settings.ui_version_check_enabled || latestRelease.checked) {
+      return;
+    }
     let cancelled = false;
     fetch(`https://api.github.com/repos/${GITHUB_REPO}/releases/latest`, {
       headers: { Accept: 'application/vnd.github+json' },
@@ -313,7 +319,7 @@ function App() {
     return () => {
       cancelled = true;
     };
-  }, []);
+  }, [settings.ui_version_check_enabled, latestRelease.checked]);
 
   useEffect(() => {
     if (status !== 'live' || qbtVersion) {
@@ -933,7 +939,7 @@ function App() {
           </div>
         </div>
 
-        {settings.ui_show_version_button !== false && (
+        {Boolean(settings.ui_version_check_enabled) && (
           <button
             className={`version-button ${updateAvailable ? 'update-available' : ''}`}
             onClick={() => setVersionModalOpen(true)}
@@ -1714,9 +1720,10 @@ function SettingsPanel({ notice, onClose, onLogout, onRevert, onSave, onUpdate, 
               <input checked={settings.ui_show_tag_filters !== false} onChange={event => onUpdate('ui_show_tag_filters', event.target.checked)} type="checkbox" />
             </label>
             <label className="setting-row">
-              <span>Version button</span>
-              <input checked={settings.ui_show_version_button !== false} onChange={event => onUpdate('ui_show_version_button', event.target.checked)} type="checkbox" />
+              <span>Version update check</span>
+              <input checked={Boolean(settings.ui_version_check_enabled)} onChange={event => onUpdate('ui_version_check_enabled', event.target.checked)} type="checkbox" />
             </label>
+            <p className="settings-hint">Off by default. When enabled, qbitctl asks GitHub for the newest release once per page load and shows the version button.</p>
             <label className="setting-row wide">
               <span>Table density</span>
               <select onChange={event => onUpdate('ui_table_density', event.target.value)} value={settings.ui_table_density || 'normal'}>

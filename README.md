@@ -49,7 +49,7 @@ Dark, terminal-inspired qBittorrent WebUI built with React. The interface keeps 
 ### Updates and compatibility
 
 - Login page using qBittorrent's WebUI credentials when authentication is required, with logout from the settings panel.
-- Sidebar version button: checks GitHub once per page load, highlights available updates, and opens a modal with the changelog, the release link, and the connected qBittorrent version. Can be hidden in settings.
+- Opt-in version update check (off by default — no GitHub request is made unless you enable it in settings): adds a sidebar version button that checks GitHub once per page load, highlights available updates, and opens a modal with the changelog, the release link, and the connected qBittorrent version.
 - Works with both qBittorrent API generations (`torrents/start`/`torrents/stop` with fallback to `torrents/resume`/`torrents/pause`).
 - Preview mode with sample data whenever the qBittorrent API is unreachable, for local development.
 - Release pipeline that tests, builds, generates a changelog, and uploads `qbitctl-<version>.zip` plus a stable-URL `qbitctl.zip`.

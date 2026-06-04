@@ -128,7 +128,34 @@ test('tracker rows expand to show the tracker response and reannounce action', a
   expect(queryByText('Connection timed out')).toBeNull();
 });
 
-test('version button replaces the connection status and opens the version modal', async () => {
+function optInVersionCheck() {
+  window.localStorage.setItem(
+    'qbitctl.appState.v1',
+    JSON.stringify({ settings: { ui_version_check_enabled: true } })
+  );
+}
+
+function githubWasCalled() {
+  return global.fetch.mock.calls.some(([url]) => String(url).includes('api.github.com'));
+}
+
+test('version check is opt-in: no button and no GitHub call by default', async () => {
+  const { findByText, getByLabelText, getByText, queryByTitle } = render(<App />);
+  await findByText('archlinux-2026.05.01-x86_64.iso');
+
+  expect(queryByTitle('Version details')).toBeNull();
+  expect(githubWasCalled()).toBe(false);
+
+  // Opting in via settings shows the button and triggers the (single) check.
+  fireEvent.click(getByLabelText('Settings'));
+  const toggle = getByText('Version update check').closest('label').querySelector('input');
+  fireEvent.click(toggle);
+  expect(queryByTitle('Version details')).toBeInTheDocument();
+  expect(githubWasCalled()).toBe(true);
+});
+
+test('version button opens the version modal when opted in', async () => {
+  optInVersionCheck();
   const { findByText, getByText, getByTitle, queryByText } = render(<App />);
   await findByText('archlinux-2026.05.01-x86_64.iso');
 
@@ -147,6 +174,7 @@ test('version button replaces the connection status and opens the version modal'
 });
 
 test('version button highlights an available update with changelog and link', async () => {
+  optInVersionCheck();
   mockFetchWithLatestRelease({
     tag_name: 'v9.9.9',
     body: 'Big new things',
@@ -166,6 +194,7 @@ test('version button highlights an available update with changelog and link', as
 });
 
 test('matching latest release keeps the version button gray', async () => {
+  optInVersionCheck();
   mockFetchWithLatestRelease({
     tag_name: 'v1.2.0',
     body: 'Current release',
@@ -178,17 +207,6 @@ test('matching latest release keeps the version button gray', async () => {
   expect(button).not.toHaveClass('update-available');
   fireEvent.click(button);
   expect(await findByText('You are on the latest version.')).toBeInTheDocument();
-});
-
-test('settings toggle hides the version button', async () => {
-  const { findByText, getByLabelText, getByText, getByTitle, queryByTitle } = render(<App />);
-  await findByText('archlinux-2026.05.01-x86_64.iso');
-  expect(getByTitle('Version details')).toBeInTheDocument();
-
-  fireEvent.click(getByLabelText('Settings'));
-  const toggle = getByText('Version button').closest('label').querySelector('input');
-  fireEvent.click(toggle);
-  expect(queryByTitle('Version details')).toBeNull();
 });
 
 function mockAuthenticatedApi() {
