@@ -60,7 +60,7 @@ Download the [latest release](https://github.com/mstraa/qbitctl-webui/releases/l
 ```bash
 curl -fL -o qbitctl.zip \
   https://github.com/mstraa/qbitctl-webui/releases/latest/download/qbitctl.zip
-unzip -oq qbitctl.zip -d /opt/qbittorrent-webuis
+unzip -oq qbitctl.zip
 ```
 
 Then enable it by following qBittorrent's [Alternate WebUI documentation](https://github.com/qbittorrent/qBittorrent/wiki/Alternate-WebUI-usage), pointing the WebUI path at the extracted `qbitctl/public` folder.
