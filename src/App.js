@@ -481,13 +481,7 @@ function App() {
 
   const filteredTorrents = useMemo(() => {
     return torrents.filter(torrent => {
-      const matchesFilter =
-        activeFilter === 'all' ||
-        (activeFilter === 'active' && isActive(torrent)) ||
-        (activeFilter === 'downloading' && isDownloading(torrent.state)) ||
-        (activeFilter === 'seeding' && isSeeding(torrent.state)) ||
-        (activeFilter === 'stopped' && isStopped(torrent.state)) ||
-        (activeFilter === 'stalled' && isStalled(torrent.state));
+      const matchesFilter = matchesStateFilter(torrent, activeFilter);
       const matchesCategory = settings.ui_show_category_filters === false ||
         !categoryFilter ||
         torrent.category === categoryFilter;
@@ -1438,15 +1432,6 @@ function RemoveTorrentModal({ deleteData, onClose, onConfirm, onDeleteData, sele
 }
 
 function AddTorrentModal({ allTags, files, magnet, notice, onClose, onFiles, onMagnet, onStopped, onSubmit, onTags, status, stopped, tags }) {
-  const draftTags = parseTags(tags);
-
-  function toggleTag(tag) {
-    const nextTags = draftTags.includes(tag)
-      ? draftTags.filter(item => item !== tag)
-      : draftTags.concat(tag);
-    onTags(nextTags.join(', '));
-  }
-
   return (
     <div className="settings-overlay tag-overlay" onClick={event => overlayClose(event, onClose)} role="dialog" aria-modal="true" aria-labelledby="add-title">
       <section className="tag-modal add-modal">
@@ -1493,23 +1478,7 @@ function AddTorrentModal({ allTags, files, magnet, notice, onClose, onFiles, onM
               value={tags}
             />
           </label>
-          {allTags.length > 0 && (
-            <section className="quick-tags" aria-label="Existing tags">
-              <span>Quick add / remove</span>
-              <div>
-                {allTags.map(tag => (
-                  <button
-                    className={draftTags.includes(tag) ? 'active' : ''}
-                    key={tag}
-                    onClick={() => toggleTag(tag)}
-                    type="button"
-                  >
-                    {tag}
-                  </button>
-                ))}
-              </div>
-            </section>
-          )}
+          <QuickTags allTags={allTags} draft={tags} onUpdate={onTags} />
           <label className="setting-row wide">
             <span>Add stopped</span>
             <input checked={stopped} onChange={event => onStopped(event.target.checked)} type="checkbox" />
@@ -1527,6 +1496,42 @@ function AddTorrentModal({ allTags, files, magnet, notice, onClose, onFiles, onM
         </footer>
       </section>
     </div>
+  );
+}
+
+// Shared "Quick add / remove" tag toggles for the add-torrent and tag-editor
+// modals. `draft` is the comma-separated tag string being edited; toggled
+// tags are written back through `onUpdate` in the same format.
+function QuickTags({ allTags, draft, onUpdate }) {
+  const draftTags = parseTags(draft);
+
+  function toggleTag(tag) {
+    const nextTags = draftTags.includes(tag)
+      ? draftTags.filter(item => item !== tag)
+      : draftTags.concat(tag);
+    onUpdate(nextTags.join(', '));
+  }
+
+  if (!allTags.length) {
+    return null;
+  }
+
+  return (
+    <section className="quick-tags" aria-label="Existing tags">
+      <span>Quick add / remove</span>
+      <div>
+        {allTags.map(tag => (
+          <button
+            className={draftTags.includes(tag) ? 'active' : ''}
+            key={tag}
+            onClick={() => toggleTag(tag)}
+            type="button"
+          >
+            {tag}
+          </button>
+        ))}
+      </div>
+    </section>
   );
 }
 
@@ -1712,15 +1717,6 @@ function DetailList({ items, title }) {
 }
 
 function TagEditor({ allTags, draft, onClose, onSave, onUpdate, selectedCount }) {
-  const draftTags = parseTags(draft);
-
-  function toggleTag(tag) {
-    const nextTags = draftTags.includes(tag)
-      ? draftTags.filter(item => item !== tag)
-      : draftTags.concat(tag);
-    onUpdate(nextTags.join(', '));
-  }
-
   return (
     <div className="settings-overlay tag-overlay" onClick={event => overlayClose(event, onClose)} role="dialog" aria-modal="true" aria-labelledby="tag-title">
       <section className="tag-modal">
@@ -1736,23 +1732,7 @@ function TagEditor({ allTags, draft, onClose, onSave, onUpdate, selectedCount })
             <span>Comma-separated tags</span>
             <input value={draft} onChange={event => onUpdate(event.target.value)} type="text" />
           </label>
-          {allTags.length > 0 && (
-            <section className="quick-tags" aria-label="Existing tags">
-              <span>Quick add / remove</span>
-              <div>
-                {allTags.map(tag => (
-                  <button
-                    className={draftTags.includes(tag) ? 'active' : ''}
-                    key={tag}
-                    onClick={() => toggleTag(tag)}
-                    type="button"
-                  >
-                    {tag}
-                  </button>
-                ))}
-              </div>
-            </section>
-          )}
+          <QuickTags allTags={allTags} draft={draft} onUpdate={onUpdate} />
           <p className="settings-hint">Add, edit, remove, or create tags here. In qBittorrent mode this uses the tag APIs.</p>
         </div>
         <footer className="settings-footer">
@@ -1913,17 +1893,7 @@ function SettingValueInput({ name, onUpdate, value }) {
 }
 
 function countForFilter(torrents, filter) {
-  if (filter === 'all') {
-    return torrents.length;
-  }
-  return torrents.filter(torrent => {
-    if (filter === 'active') return isActive(torrent);
-    if (filter === 'downloading') return isDownloading(torrent.state);
-    if (filter === 'seeding') return isSeeding(torrent.state);
-    if (filter === 'stopped') return isStopped(torrent.state);
-    if (filter === 'stalled') return isStalled(torrent.state);
-    return false;
-  }).length;
+  return torrents.filter(torrent => matchesStateFilter(torrent, filter)).length;
 }
 
 function compareTorrents(left, right, sort) {
@@ -2043,6 +2013,22 @@ function isStalled(state) {
 
 function isActive(torrent) {
   return (torrent.dlspeed || 0) > 0 || (torrent.upspeed || 0) > 0;
+}
+
+// Single source of truth for the sidebar state filters: both the torrent
+// list and the per-filter counts go through these predicates.
+const STATE_FILTERS = {
+  all: () => true,
+  active: torrent => isActive(torrent),
+  downloading: torrent => isDownloading(torrent.state),
+  seeding: torrent => isSeeding(torrent.state),
+  stopped: torrent => isStopped(torrent.state),
+  stalled: torrent => isStalled(torrent.state),
+};
+
+function matchesStateFilter(torrent, filter) {
+  const predicate = STATE_FILTERS[filter];
+  return predicate ? predicate(torrent) : false;
 }
 
 function statusTone(torrent) {
