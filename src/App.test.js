@@ -286,6 +286,135 @@ test('rejected credentials show an error, valid ones enter live mode, logout ret
   expect(await findByText('qBittorrent WebUI login')).toBeInTheDocument();
 });
 
+test('queue column shows positions and a dash for unqueued torrents', async () => {
+  const { findByText, getByText } = render(<App />);
+  await findByText('archlinux-2026.05.01-x86_64.iso');
+
+  expect(getByText('#')).toBeInTheDocument();
+
+  const archRow = getByText('archlinux-2026.05.01-x86_64.iso').closest('.torrent-row');
+  expect(within(archRow).getByText('1')).toBeInTheDocument();
+  expect(within(archRow).getByLabelText('Move up in queue')).toBeDisabled();
+  expect(within(archRow).getByLabelText('Move down in queue')).toBeEnabled();
+
+  // Bottom of the queue (3 of 3) -> down is disabled.
+  const refRow = getByText('reference-dataset-v14.tar.zst').closest('.torrent-row');
+  expect(within(refRow).getByText('3')).toBeInTheDocument();
+  expect(within(refRow).getByLabelText('Move down in queue')).toBeDisabled();
+
+  // Seeding torrent is not queued: dash, no chevrons.
+  const seedRow = getByText('public-domain-documentary-collection').closest('.torrent-row');
+  expect(within(seedRow).getByText('-')).toBeInTheDocument();
+  expect(within(seedRow).queryByLabelText('Move up in queue')).toBeNull();
+  expect(within(seedRow).queryByLabelText('Move down in queue')).toBeNull();
+});
+
+test('queue chevrons do not select the row and stay local in preview mode', async () => {
+  const { container, findByText, getByText, queryByText } = render(<App />);
+  await findByText('nightly.build.assets.pack');
+
+  const row = getByText('nightly.build.assets.pack').closest('.torrent-row');
+  fireEvent.click(within(row).getByLabelText('Move up in queue'));
+
+  expect(container.querySelector('.torrent-row.selected')).toBeNull();
+  expect(queryByText('ETA')).toBeNull();
+  expect(global.fetch.mock.calls.some(([url]) => String(url).includes('Prio'))).toBe(false);
+});
+
+test('sorting by # orders the queue and sinks unqueued torrents', async () => {
+  const { container, findByText, getByText } = render(<App />);
+  await findByText('archlinux-2026.05.01-x86_64.iso');
+
+  fireEvent.click(getByText('#'));
+  const names = Array.from(container.querySelectorAll('.torrent-name strong')).map(node => node.textContent);
+  expect(names).toEqual([
+    'archlinux-2026.05.01-x86_64.iso',
+    'nightly.build.assets.pack',
+    'reference-dataset-v14.tar.zst',
+    'public-domain-documentary-collection',
+  ]);
+});
+
+test('queue column can be hidden from settings', async () => {
+  const { container, findByText, getByLabelText, getByText, queryByText } = render(<App />);
+  await findByText('archlinux-2026.05.01-x86_64.iso');
+  expect(container.querySelector('.queue-cell')).toBeInTheDocument();
+
+  fireEvent.click(getByLabelText('Settings'));
+  const toggle = getByText('Queue column').closest('label').querySelector('input');
+  fireEvent.click(toggle);
+
+  expect(container.querySelector('.queue-cell')).toBeNull();
+  expect(queryByText('#')).toBeNull();
+  const stored = JSON.parse(window.localStorage.getItem('qbitctl.appState.v1'));
+  expect(stored.settings.ui_show_queue_column).toBe(false);
+});
+
+function mockLiveQueueApi() {
+  const base = {
+    progress: 0.4, dlspeed: 100, upspeed: 0, size: 1000, downloaded: 400,
+    uploaded: 0, ratio: 0, num_seeds: 1, num_leechs: 1, category: '',
+    save_path: '/data', tags: '', added_on: 1700000000, completion_on: 0, eta: 60,
+  };
+  global.fetch.mockImplementation(url => {
+    const u = String(url);
+    if (u.includes('/api/v2/torrents/info')) {
+      return Promise.resolve({
+        ok: true,
+        status: 200,
+        json: () => Promise.resolve([
+          { ...base, hash: 'live1', name: 'live-one', state: 'downloading', priority: 1 },
+          { ...base, hash: 'live2', name: 'live-two', state: 'queuedDL', priority: 2 },
+        ]),
+      });
+    }
+    if (u.includes('/api/v2/torrents/increasePrio') || u.includes('/api/v2/torrents/decreasePrio')) {
+      return Promise.resolve({ ok: true, status: 200, text: () => Promise.resolve('') });
+    }
+    return Promise.reject(new Error('offline'));
+  });
+}
+
+test('queue chevrons call the qBittorrent priority API in live mode', async () => {
+  mockLiveQueueApi();
+  const { findByText } = render(<App />);
+  const row = (await findByText('live-two')).closest('.torrent-row');
+
+  fireEvent.click(within(row).getByLabelText('Move up in queue'));
+
+  const call = global.fetch.mock.calls.find(([url]) => String(url).includes('/api/v2/torrents/increasePrio'));
+  expect(call).toBeTruthy();
+  expect(String(call[1].body)).toBe('hashes=live2');
+  // Optimistic swap shows the new position before the next poll.
+  expect(within(row).getByText('1')).toBeInTheDocument();
+});
+
+test('Alt+Arrow on a focused row moves it in the queue', async () => {
+  mockLiveQueueApi();
+  const { findByText } = render(<App />);
+  const row = (await findByText('live-one')).closest('.torrent-row');
+
+  fireEvent.keyDown(row, { altKey: true, key: 'ArrowDown' });
+
+  const call = global.fetch.mock.calls.find(([url]) => String(url).includes('/api/v2/torrents/decreasePrio'));
+  expect(call).toBeTruthy();
+  expect(String(call[1].body)).toBe('hashes=live1');
+});
+
+test('hiding the queue column resets an active # sort to name', async () => {
+  const { container, findByText, getByLabelText, getByText } = render(<App />);
+  await findByText('archlinux-2026.05.01-x86_64.iso');
+
+  fireEvent.click(getByText('#'));
+  fireEvent.click(getByLabelText('Settings'));
+  fireEvent.click(getByText('Queue column').closest('label').querySelector('input'));
+
+  const stored = JSON.parse(window.localStorage.getItem('qbitctl.appState.v1'));
+  expect(stored.sort.key).toBe('name');
+  const names = Array.from(container.querySelectorAll('.torrent-name strong')).map(node => node.textContent);
+  expect(names[0]).toBe('archlinux-2026.05.01-x86_64.iso');
+});
+
 test('add modal accepts multiple torrent files and tags', async () => {
   const { findByLabelText, findByText, getByLabelText, getByText } = render(<App />);
   await findByText('archlinux-2026.05.01-x86_64.iso');

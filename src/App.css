@@ -638,6 +638,19 @@ dd {
   min-width: 980px;
 }
 
+.queue-column .table-head,
+.queue-column .torrent-row {
+  /* 74px keeps 4-digit queue positions inside the track. */
+  grid-template-columns: 74px minmax(260px, 1.9fr) 140px minmax(170px, 1fr) 90px 90px 70px 80px;
+  min-width: 1066px;
+}
+
+/* Center the '#' header over the centered queue numbers (the header button
+   is a flex box, so text-align would not move it). */
+.queue-column .table-head button:first-child {
+  justify-content: center;
+}
+
 .table-head {
   position: sticky;
   top: 0;
@@ -682,6 +695,7 @@ dd {
   padding: 0 14px;
   text-align: left;
   cursor: pointer;
+  user-select: none;
 }
 
 .torrent-row:hover,
@@ -698,6 +712,46 @@ dd {
   font-family: "SFMono-Regular", Consolas, "Liberation Mono", monospace;
   font-size: 12px;
   font-variant-numeric: tabular-nums;
+}
+
+.queue-cell {
+  display: flex;
+  gap: 2px;
+  align-items: center;
+  /* Keeps numbers and the unqueued dash on the same vertical line. */
+  justify-content: center;
+}
+
+.queue-cell button {
+  min-width: 18px;
+  padding: 0;
+  border: 0;
+  background: transparent;
+  color: var(--faint);
+  font-size: 11px;
+  line-height: 1;
+  cursor: pointer;
+}
+
+.queue-cell button:hover:not(:disabled) {
+  color: var(--orange);
+}
+
+.queue-cell button:disabled {
+  opacity: 0.35;
+  cursor: default;
+}
+
+.queue-cell strong {
+  min-width: 20px;
+  color: var(--text);
+  font-weight: 600;
+  text-align: center;
+}
+
+.queue-cell .queue-none {
+  color: var(--faint);
+  font-weight: 400;
 }
 
 .torrent-name {
@@ -807,6 +861,10 @@ dd {
 
 .compact-table .progress-track {
   height: 5px;
+}
+
+.compact-table .queue-cell button {
+  font-size: 10px;
 }
 
 .empty-state {
@@ -1540,7 +1598,10 @@ dd {
     background: transparent;
   }
 
-  .torrent-row {
+  /* Repeated selector so the card layout also beats the two-class
+     .queue-column .torrent-row grid override. */
+  .torrent-row,
+  .queue-column .torrent-row {
     min-width: 0;
     grid-template-columns: 1fr;
     gap: 9px;

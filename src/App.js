@@ -17,6 +17,7 @@ const SAMPLE_TORRENTS = [
     num_seeds: 91,
     num_leechs: 14,
     category: 'linux',
+    priority: 1,
     save_path: '/data/torrents/linux',
     tags: 'linux, mirror',
     added_on: 1779734520,
@@ -46,6 +47,7 @@ const SAMPLE_TORRENTS = [
     num_seeds: 0,
     num_leechs: 6,
     category: 'work',
+    priority: 2,
     save_path: '/data/torrents/work',
     tags: 'nightly, assets',
     added_on: 1779671220,
@@ -74,6 +76,8 @@ const SAMPLE_TORRENTS = [
     num_seeds: 38,
     num_leechs: 3,
     category: 'media',
+    // Seeding torrents are not queued; qBittorrent reports priority 0/-1.
+    priority: 0,
     save_path: '/data/torrents/media',
     tags: 'archive, public-domain',
     added_on: 1779458400,
@@ -102,6 +106,7 @@ const SAMPLE_TORRENTS = [
     num_seeds: 12,
     num_leechs: 41,
     category: 'datasets',
+    priority: 3,
     save_path: '/data/torrents/datasets',
     tags: 'reference, stopped',
     added_on: 1779300000,
@@ -147,6 +152,7 @@ const DEFAULT_SETTINGS = {
   ui_show_category_filters: true,
   ui_show_tag_filters: true,
   ui_show_ratio_progress: true,
+  ui_show_queue_column: true,
   // Opt-in: while disabled (the default) no GitHub request is ever made.
   ui_version_check_enabled: false,
   ui_table_density: 'normal',
@@ -158,6 +164,7 @@ const UI_SETTING_KEYS = [
   'ui_show_category_filters',
   'ui_show_tag_filters',
   'ui_show_ratio_progress',
+  'ui_show_queue_column',
   'ui_version_check_enabled',
   'ui_table_density',
 ];
@@ -165,6 +172,7 @@ const UI_SETTING_KEYS = [
 const GITHUB_REPO = 'mstraa/qbitctl-webui';
 
 const COLUMNS = [
+  { key: 'priority', label: '#' },
   { key: 'name', label: 'Name' },
   { key: 'state', label: 'Status' },
   { key: 'progress', label: 'Progress' },
@@ -529,6 +537,26 @@ function App() {
   const selectedCount = selectedHashes.length;
   const selectedActionHashes = selectedHashes.length ? selectedHashes : primaryHash ? [primaryHash] : [];
 
+  const showQueueColumn = settings.ui_show_queue_column !== false;
+  const tableColumns = showQueueColumn
+    ? COLUMNS
+    : COLUMNS.filter(column => column.key !== 'priority');
+  const maxQueuePriority = useMemo(
+    () => torrents.reduce(
+      (max, torrent) => (torrent.priority > 0 ? Math.max(max, torrent.priority) : max),
+      0
+    ),
+    [torrents]
+  );
+
+  // Hiding the queue column would otherwise leave an invisible '#' sort with
+  // no header indicator and no way to change it.
+  useEffect(() => {
+    if (!showQueueColumn && sort.key === 'priority') {
+      setSort({ key: 'name', direction: 'asc' });
+    }
+  }, [showQueueColumn, sort.key]);
+
   function handleSort(key) {
     setSort(current => ({
       key,
@@ -562,6 +590,70 @@ function App() {
 
     setPrimaryHash(hash);
     setLastClickedHash(hash);
+  }
+
+  // Rows are divs (the queue buttons cannot nest inside a button), so Enter
+  // and Space reproduce the native button activation for keyboard users:
+  // Enter fires on keydown, Space on keyup, like a real <button>. Alt+Arrow
+  // moves the focused row in the queue (the chevrons are mouse-only tab-wise
+  // so each row stays a single tab stop).
+  function handleRowKeyDown(event, torrent) {
+    if (event.target !== event.currentTarget) {
+      return;
+    }
+    if (showQueueColumn && event.altKey && (event.key === 'ArrowUp' || event.key === 'ArrowDown')) {
+      event.preventDefault();
+      moveInQueue(torrent, event.key === 'ArrowUp' ? 'up' : 'down');
+      return;
+    }
+    if (event.key === 'Enter') {
+      event.preventDefault();
+      handleRowClick(event, torrent);
+      return;
+    }
+    if (event.key === ' ' || event.key === 'Spacebar') {
+      // Block page scroll now; activation happens on keyup.
+      event.preventDefault();
+    }
+  }
+
+  function handleRowKeyUp(event, torrent) {
+    if (event.target !== event.currentTarget) {
+      return;
+    }
+    if (event.key === ' ' || event.key === 'Spacebar') {
+      event.preventDefault();
+      handleRowClick(event, torrent);
+    }
+  }
+
+  function moveInQueue(torrent, direction) {
+    const from = torrent.priority;
+    if (!(from > 0)) {
+      return;
+    }
+    if (direction === 'up' ? from <= 1 : from >= maxQueuePriority) {
+      return;
+    }
+    if (status !== 'live') {
+      flashPreviewAction();
+      return;
+    }
+    const to = direction === 'up' ? from - 1 : from + 1;
+    // Optimistic swap with the queue neighbour; the next poll confirms it.
+    setTorrents(current => current.map(item => {
+      if (item.hash === torrent.hash) {
+        return { ...item, priority: to };
+      }
+      if (item.priority === to) {
+        return { ...item, priority: from };
+      }
+      return item;
+    }));
+    postFirstAvailable(
+      [direction === 'up' ? '/api/v2/torrents/increasePrio' : '/api/v2/torrents/decreasePrio'],
+      new URLSearchParams({ hashes: torrent.hash })
+    );
   }
 
   function clearSelection() {
@@ -890,7 +982,7 @@ function App() {
     <div
       className={`terminal-shell ${showDetailsPanel ? '' : 'details-closed'} ${
         settings.ui_table_density === 'compact' ? 'compact-table' : ''
-      }`}
+      } ${showQueueColumn ? 'queue-column' : ''}`}
       style={{ '--orange': settings.ui_accent_color || '#f07b24' }}
     >
       <aside className="sidebar">
@@ -1041,7 +1133,7 @@ function App() {
 
         <section className="torrent-table" aria-label="Torrent list">
           <div className="table-head">
-            {COLUMNS.map(column => (
+            {tableColumns.map(column => (
               <button key={column.key} onClick={() => handleSort(column.key)} type="button">
                 <span>{column.label}</span>
                 <strong>{sort.key === column.key ? sort.direction : ''}</strong>
@@ -1052,12 +1144,54 @@ function App() {
           {visibleTorrents.map(torrent => {
             const selected = selectedHashes.includes(torrent.hash);
             return (
-              <button
+              <div
+                aria-keyshortcuts={showQueueColumn && torrent.priority > 0 ? 'Alt+ArrowUp Alt+ArrowDown' : undefined}
+                aria-label={`${torrent.name}, ${formatStatus(torrent)}`}
                 className={`torrent-row ${selected ? 'selected' : ''}`}
                 key={torrent.hash}
                 onClick={event => handleRowClick(event, torrent)}
-                type="button"
+                onKeyDown={event => handleRowKeyDown(event, torrent)}
+                onKeyUp={event => handleRowKeyUp(event, torrent)}
+                role="button"
+                tabIndex={0}
               >
+                {showQueueColumn && (
+                  <span className="queue-cell">
+                    {torrent.priority > 0 ? (
+                      <>
+                        <button
+                          aria-label="Move up in queue"
+                          disabled={torrent.priority <= 1}
+                          onClick={event => {
+                            event.stopPropagation();
+                            moveInQueue(torrent, 'up');
+                          }}
+                          tabIndex={-1}
+                          title="Move up in queue (Alt+↑ on the focused row)"
+                          type="button"
+                        >
+                          ∧
+                        </button>
+                        <strong>{torrent.priority}</strong>
+                        <button
+                          aria-label="Move down in queue"
+                          disabled={torrent.priority >= maxQueuePriority}
+                          onClick={event => {
+                            event.stopPropagation();
+                            moveInQueue(torrent, 'down');
+                          }}
+                          tabIndex={-1}
+                          title="Move down in queue (Alt+↓ on the focused row)"
+                          type="button"
+                        >
+                          ∨
+                        </button>
+                      </>
+                    ) : (
+                      <strong className="queue-none">-</strong>
+                    )}
+                  </span>
+                )}
                 <span className="torrent-name">
                   <strong>{torrent.name}</strong>
                   <small>{formatNameMeta(torrent)}</small>
@@ -1074,7 +1208,7 @@ function App() {
                 <span>{formatSpeed(torrent.upspeed)}</span>
                 <span>{formatRatio(torrent.ratio)}</span>
                 <span>{formatDateShort(torrent.added_on)}</span>
-              </button>
+              </div>
             );
           })}
 
@@ -1683,6 +1817,10 @@ function SettingsPanel({ notice, onClose, onLogout, onRevert, onSave, onUpdate, 
               <input checked={settings.ui_show_tag_filters !== false} onChange={event => onUpdate('ui_show_tag_filters', event.target.checked)} type="checkbox" />
             </label>
             <label className="setting-row">
+              <span>Queue column</span>
+              <input checked={settings.ui_show_queue_column !== false} onChange={event => onUpdate('ui_show_queue_column', event.target.checked)} type="checkbox" />
+            </label>
+            <label className="setting-row">
               <span>Version update check</span>
               <input checked={Boolean(settings.ui_version_check_enabled)} onChange={event => onUpdate('ui_version_check_enabled', event.target.checked)} type="checkbox" />
             </label>
@@ -1801,6 +1939,10 @@ function compareTorrents(left, right, sort) {
 function sortValue(torrent, key) {
   if (key === 'state') return formatStatus(torrent);
   if (key === 'name') return torrent.name || '';
+  if (key === 'priority') {
+    // Unqueued torrents (priority 0/-1) always sort below queued ones.
+    return torrent.priority > 0 ? torrent.priority : Number.MAX_SAFE_INTEGER;
+  }
   return torrent[key] || 0;
 }
 
