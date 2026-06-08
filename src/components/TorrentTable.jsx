@@ -1,4 +1,3 @@
-import React from 'react';
 import { formatDateShort, formatRatio, formatSpeed } from '../lib/format';
 import { formatNameMeta, formatStatus } from '../lib/torrents';
 import { ProgressBar, StatusBadge } from './common';

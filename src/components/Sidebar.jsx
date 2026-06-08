@@ -1,4 +1,3 @@
-import React from 'react';
 import { FILTERS } from '../lib/constants';
 import { formatBytes } from '../lib/format';
 import { countForFilter, parseTags } from '../lib/torrents';

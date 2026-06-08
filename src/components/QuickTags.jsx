@@ -1,4 +1,3 @@
-import React from 'react';
 import { parseTags } from '../lib/torrents';
 
 // Shared "Quick add / remove" tag toggles for the add-torrent and tag-editor

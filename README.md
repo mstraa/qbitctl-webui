@@ -74,7 +74,7 @@ To revert, open qbitctl settings and use `Revert to default qBittorrent WebUI`, 
 
 ### Requirements
 
-- Node 18 (the version used by CI; anything from Node 17 up needs the legacy OpenSSL flag shown below because of the older Webpack 4 stack)
+- Node 24 (the version used by CI; Node 20.19+ or 22.13+ also work)
 - Yarn 1.x (classic)
 
 ### Setup
@@ -88,21 +88,25 @@ yarn install --frozen-lockfile
 ### Local development
 
 ```bash
-NODE_OPTIONS=--openssl-legacy-provider yarn start
+yarn start
 ```
 
-This starts the dev server on `http://localhost:3000` (set `PORT` to change it). Without a reachable qBittorrent API the UI falls back to built-in preview data, so you can develop the interface without a running qBittorrent instance.
+This starts the Vite dev server on `http://localhost:3000`. Without a reachable qBittorrent API the UI falls back to built-in preview data, so you can develop the interface without a running qBittorrent instance. To develop against a live qBittorrent, set `QBIT_URL` to its address and the dev server proxies `/api` calls to it:
+
+```bash
+QBIT_URL=http://localhost:8080 yarn start
+```
 
 Run the tests with:
 
 ```bash
-yarn test --watchAll=false
+yarn test
 ```
 
 ### Build and package
 
 ```bash
-NODE_OPTIONS=--openssl-legacy-provider yarn build
+yarn build
 yarn package:release
 ```
 

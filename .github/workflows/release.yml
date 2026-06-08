@@ -31,19 +31,17 @@ jobs:
       - name: Setup Node
         uses: actions/setup-node@v4
         with:
-          node-version: 18
+          node-version: 24
           cache: yarn
 
       - name: Install dependencies
         run: yarn install --frozen-lockfile
 
       - name: Test
-        run: CI=true yarn test --watchAll=false
+        run: CI=true yarn test
 
       - name: Build WebUI
         run: yarn build
-        env:
-          NODE_OPTIONS: --openssl-legacy-provider
 
       - name: Package qbitctl
         id: package

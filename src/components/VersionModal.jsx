@@ -1,4 +1,3 @@
-import React from 'react';
 import { GITHUB_REPO } from '../lib/constants';
 import { overlayClose } from './common';
 

@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import { useState } from 'react';
 import { formatBytes, formatEta, formatRatio, formatSpeed, formatTimestamp } from '../lib/format';
 import {
   formatSeedPeerCount,

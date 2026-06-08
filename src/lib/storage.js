@@ -16,7 +16,7 @@ export function readAppState() {
   try {
     const raw = window.localStorage.getItem(APP_STATE_STORAGE_KEY);
     return raw ? JSON.parse(raw) : {};
-  } catch (error) {
+  } catch {
     return {};
   }
 }
@@ -28,7 +28,7 @@ export function writeAppState(partialState) {
       ...current,
       ...partialState,
     }));
-  } catch (error) {
+  } catch {
     // Persistence is best-effort; the UI should keep working without storage.
   }
 }

@@ -1,17 +1,17 @@
-import React from 'react';
 import { fireEvent, render, within } from '@testing-library/react';
 import App from './App';
 
 beforeEach(() => {
   window.localStorage.clear();
-  process.env.REACT_APP_VERSION = '1.2.0';
+  vi.stubEnv('VITE_APP_VERSION', '1.2.0');
   // Default: no network at all -> the app falls back to preview mode and the
   // GitHub release check stays unresolved. Tests override this when needed.
-  jest.spyOn(global, 'fetch').mockImplementation(() => Promise.reject(new Error('offline')));
+  vi.spyOn(global, 'fetch').mockImplementation(() => Promise.reject(new Error('offline')));
 });
 
 afterEach(() => {
-  jest.restoreAllMocks();
+  vi.restoreAllMocks();
+  vi.unstubAllEnvs();
 });
 
 function mockFetchWithLatestRelease(release) {
