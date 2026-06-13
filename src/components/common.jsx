@@ -1,4 +1,3 @@
-import React from 'react';
 import { formatBytes } from '../lib/format';
 import { formatStatus, statusTone } from '../lib/torrents';
 

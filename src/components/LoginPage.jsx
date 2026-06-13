@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import { useState } from 'react';
 
 function LoginPage({ accent, busy, error, onLogin }) {
   const [username, setUsername] = useState('');

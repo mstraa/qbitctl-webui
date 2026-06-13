@@ -1,4 +1,3 @@
-import React from 'react';
 import { overlayClose } from './common';
 import QuickTags from './QuickTags';
 

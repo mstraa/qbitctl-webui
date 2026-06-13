@@ -1,4 +1,3 @@
-import React from 'react';
 import { formatAxisSpeed } from '../lib/format';
 
 function SpeedHistoryGraph({ history }) {

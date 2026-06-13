@@ -1,46 +1,14 @@
 {
   "$schema": "https://raw.githubusercontent.com/fallow-rs/fallow/main/schema.json",
-  // Jest config lives in package.json as strings, so test files and the
-  // build/test scripts are declared as entry points explicitly.
+  // index.html is the Vite entry (loads src/index.jsx); test files and the
+  // Vitest setup are reached only by the test runner, and the build tooling
+  // config files are loaded by Vite/ESLint, so all are declared explicitly.
   "entry": [
-    "src/index.js",
+    "index.html",
+    "src/index.jsx",
     "src/setupTests.js",
-    "src/**/*.test.js",
-    "scripts/build.js",
-    "scripts/start.js",
-    "scripts/test.js"
-  ],
-  // Referenced only by string: package.json jest "transform" globs and the
-  // `${__dirname}/pnpTs.js` template in config/webpack.config.js.
-  "dynamicallyLoaded": [
-    "config/jest/*.js",
-    "config/pnpTs.js"
-  ],
-  // CRA-eject build tooling that the import graph cannot see:
-  // - webpack loaders/plugins referenced via require.resolve('...') strings
-  // - eslint plugins required as peers by eslintConfig "extends": "react-app"
-  // - jest infra referenced via package.json strings
-  "ignoreDependencies": [
-    "babel-loader",
-    "babel-plugin-named-asset-import",
-    "css-loader",
-    "eslint-loader",
-    "file-loader",
-    "postcss-loader",
-    "resolve-url-loader",
-    "sass-loader",
-    "style-loader",
-    "url-loader",
-    "@typescript-eslint/eslint-plugin",
-    "@typescript-eslint/parser",
-    "babel-eslint",
-    "eslint-plugin-flowtype",
-    "eslint-plugin-import",
-    "eslint-plugin-jsx-a11y",
-    "eslint-plugin-react",
-    "eslint-plugin-react-hooks",
-    "identity-obj-proxy",
-    "react-app-polyfill",
-    "jest-resolve"
+    "src/**/*.test.{js,jsx}",
+    "vite.config.js",
+    "eslint.config.mjs"
   ]
 }

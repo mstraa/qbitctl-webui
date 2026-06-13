@@ -1,4 +1,4 @@
-import React, { useEffect, useMemo, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import './App.css';
 import AddTorrentModal from './components/AddTorrentModal';
 import LoginPage from './components/LoginPage';
@@ -76,7 +76,7 @@ function App() {
   const [loginBusy, setLoginBusy] = useState(false);
   const [authNonce, setAuthNonce] = useState(0);
 
-  const appVersion = process.env.REACT_APP_VERSION || '0.0.0';
+  const appVersion = import.meta.env.VITE_APP_VERSION || '0.0.0';
   const updateAvailable = latestRelease.checked && isNewerVersion(latestRelease.version, appVersion);
 
   const selectedTorrent = primaryHash
@@ -107,7 +107,7 @@ function App() {
         setTorrents(nextTorrents);
         setStatus('live');
         setLastSync(new Date().toLocaleTimeString());
-      } catch (error) {
+      } catch {
         if (!isMounted) {
           return;
         }
@@ -244,7 +244,7 @@ function App() {
               ? serverState.free_space_on_disk
               : null;
           }
-        } catch (error) {
+        } catch {
           nextInfo.externalIp = 'unknown';
           nextInfo.freeSpace = null;
         }
@@ -254,7 +254,7 @@ function App() {
           nextInfo.freeSpace = typeof estimate.quota === 'number' && typeof estimate.usage === 'number'
             ? estimate.quota - estimate.usage
             : null;
-        } catch (error) {
+        } catch {
           nextInfo.freeSpace = null;
         }
       }

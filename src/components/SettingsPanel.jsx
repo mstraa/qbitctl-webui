@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import { useState } from 'react';
 import { overlayClose } from './common';
 
 function WebUISection({ onRevert, onUpdate, settings }) {
