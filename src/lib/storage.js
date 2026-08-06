@@ -74,3 +74,18 @@ export function normalizeTagFilters(state) {
   }
   return [];
 }
+
+export function normalizeExcludedCategories(state) {
+  return normalizeStringArray(state.excludedCategories);
+}
+
+export function normalizeExcludedTagFilters(state) {
+  return normalizeStringArray(state.excludedTagFilters);
+}
+
+function normalizeStringArray(candidate) {
+  if (!Array.isArray(candidate)) {
+    return [];
+  }
+  return Array.from(new Set(candidate.filter(item => typeof item === 'string' && item)));
+}

@@ -1,5 +1,20 @@
+const COMMON_TORRENT_SETTINGS = {
+  dl_limit: -1,
+  up_limit: -1,
+  ratio_limit: -2,
+  seeding_time_limit: -2,
+  inactive_seeding_time_limit: -2,
+  share_limit_action: 'Default',
+  auto_tmm: false,
+  seq_dl: false,
+  f_l_piece_prio: false,
+  force_start: false,
+  super_seeding: false,
+};
+
 export const SAMPLE_TORRENTS = [
   {
+    ...COMMON_TORRENT_SETTINGS,
     hash: 'linux-iso-stack',
     name: 'archlinux-2026.05.01-x86_64.iso',
     state: 'downloading',
@@ -19,6 +34,7 @@ export const SAMPLE_TORRENTS = [
     tags: 'linux, mirror',
     added_on: 1779734520,
     completion_on: 0,
+    comment: 'Official Arch Linux image',
     trackers: [
       { url: 'udp://tracker.opentrackr.org:1337/announce', status: 2, msg: '', num_seeds: 91, num_peers: 14 },
       { url: 'https://torrent.ubuntu.com/announce', status: 2, msg: '', num_seeds: 64, num_peers: 9 },
@@ -30,6 +46,7 @@ export const SAMPLE_TORRENTS = [
     ],
   },
   {
+    ...COMMON_TORRENT_SETTINGS,
     hash: 'media-nightly',
     name: 'nightly.build.assets.pack',
     state: 'stalledDL',
@@ -49,6 +66,8 @@ export const SAMPLE_TORRENTS = [
     tags: 'nightly, assets',
     added_on: 1779671220,
     completion_on: 0,
+    comment: 'Internal nightly assets',
+    auto_tmm: true,
     trackers: [
       { url: 'udp://tracker.internal.local:6969/announce', status: 4, msg: 'Connection timed out', num_seeds: 0, num_peers: 0 },
       { url: 'http://opentracker.i2p.rocks:6969/announce', status: 1, msg: '', num_seeds: 0, num_peers: 0 },
@@ -59,6 +78,7 @@ export const SAMPLE_TORRENTS = [
     ],
   },
   {
+    ...COMMON_TORRENT_SETTINGS,
     hash: 'doc-archive',
     name: 'public-domain-documentary-collection',
     state: 'uploading',
@@ -79,6 +99,7 @@ export const SAMPLE_TORRENTS = [
     tags: 'archive, public-domain',
     added_on: 1779458400,
     completion_on: 1779482100,
+    comment: 'Public-domain collection',
     trackers: [
       { url: 'udp://tracker.publicbt.com:80/announce', status: 4, msg: 'Torrent not registered with this tracker', num_seeds: 0, num_peers: 0 },
       { url: 'udp://tracker.opentrackr.org:1337/announce', status: 2, msg: '', num_seeds: 38, num_peers: 3 },
@@ -89,6 +110,7 @@ export const SAMPLE_TORRENTS = [
     ],
   },
   {
+    ...COMMON_TORRENT_SETTINGS,
     hash: 'paused-reference',
     name: 'reference-dataset-v14.tar.zst',
     state: 'pausedDL',
@@ -108,6 +130,7 @@ export const SAMPLE_TORRENTS = [
     tags: 'reference, stopped',
     added_on: 1779300000,
     completion_on: 0,
+    comment: 'Reference data',
     trackers: [
       { url: 'https://academictorrents.com/announce.php', status: 0, msg: '', num_seeds: 0, num_peers: 0 },
       { url: 'udp://tracker.storage.local:6969/announce', status: 0, msg: '', num_seeds: 0, num_peers: 0 },

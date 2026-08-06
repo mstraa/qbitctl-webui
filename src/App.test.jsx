@@ -1,12 +1,24 @@
-import { fireEvent, render, within } from '@testing-library/react';
+import { fireEvent, render, waitFor, within } from '@testing-library/react';
 import App from './App';
+import { SAMPLE_TORRENTS } from './lib/sampleData';
+
+function mockDefaultApi(url) {
+  if (String(url).includes('/api/v2/torrents/info')) {
+    return Promise.resolve({
+      ok: true,
+      status: 200,
+      json: () => Promise.resolve(SAMPLE_TORRENTS),
+    });
+  }
+  return Promise.reject(new Error('offline'));
+}
 
 beforeEach(() => {
   window.localStorage.clear();
   vi.stubEnv('VITE_APP_VERSION', '1.2.0');
-  // Default: no network at all -> the app falls back to preview mode and the
-  // GitHub release check stays unresolved. Tests override this when needed.
-  vi.spyOn(global, 'fetch').mockImplementation(() => Promise.reject(new Error('offline')));
+  // Most component tests use a live API response backed by stable fixtures.
+  // Tests for auth, queue APIs, and disconnection override this when needed.
+  vi.spyOn(global, 'fetch').mockImplementation(mockDefaultApi);
 });
 
 afterEach(() => {
@@ -18,8 +30,14 @@ function mockFetchWithLatestRelease(release) {
   global.fetch.mockImplementation(url =>
     String(url).includes('api.github.com')
       ? Promise.resolve({ ok: true, json: () => Promise.resolve(release) })
-      : Promise.reject(new Error('offline'))
+      : mockDefaultApi(url)
   );
+}
+
+function fireBrowserDoubleClick(element) {
+  fireEvent.click(element, { detail: 1 });
+  fireEvent.click(element, { detail: 2 });
+  fireEvent.doubleClick(element, { detail: 2 });
 }
 
 test('renders qbitctl shell', () => {
@@ -40,6 +58,157 @@ test('toolbar exposes Stop instead of Pause', async () => {
   const toolbar = await findByLabelText('Torrent actions');
   expect(within(toolbar).getByText('Stop')).toBeInTheDocument();
   expect(within(toolbar).queryByText('Pause')).toBeNull();
+});
+
+function mockTorrentEditorApi() {
+  global.fetch.mockImplementation((url, options = {}) => {
+    const value = String(url);
+    if (value.includes('/api/v2/torrents/info')) {
+      return Promise.resolve({ ok: true, status: 200, json: () => Promise.resolve(SAMPLE_TORRENTS) });
+    }
+    if (value.includes('/api/v2/app/webapiVersion')) {
+      return Promise.resolve({ ok: true, status: 200, text: () => Promise.resolve('2.15.0') });
+    }
+    if (value.includes('/api/v2/torrents/trackers')) {
+      const hash = new URL(value, 'http://localhost').searchParams.get('hash');
+      const torrent = SAMPLE_TORRENTS.find(item => item.hash === hash);
+      return Promise.resolve({ ok: true, status: 200, json: () => Promise.resolve(torrent?.trackers || []) });
+    }
+    if (options.method === 'POST' && value.includes('/api/v2/torrents/')) {
+      return Promise.resolve({ ok: true, status: 200, text: () => Promise.resolve('') });
+    }
+    return Promise.reject(new Error('offline'));
+  });
+}
+
+test('torrent editor button follows selection and exposes single-torrent settings', async () => {
+  mockTorrentEditorApi();
+  const { findByLabelText, findByRole, findByText } = render(<App />);
+  const toolbar = await findByLabelText('Torrent actions');
+  const editButton = within(toolbar).getByLabelText('Edit selected torrents');
+  expect(editButton).toBeDisabled();
+
+  fireEvent.click(await findByText('archlinux-2026.05.01-x86_64.iso'));
+  expect(editButton).toBeEnabled();
+  fireEvent.click(editButton);
+
+  const dialog = await findByRole('dialog', { name: 'Edit torrent' });
+  expect(within(dialog).getByText('Torrent name')).toBeInTheDocument();
+  expect(within(dialog).getByText('Save location')).toBeInTheDocument();
+  expect(within(dialog).getByText('Download limit (B/s, 0 = unlimited)')).toBeInTheDocument();
+  expect(within(dialog).getByText('Automatic Torrent Management')).toBeInTheDocument();
+  expect(within(dialog).getByText('Comment')).toBeInTheDocument();
+});
+
+test('multi-torrent editor hides mixed settings but retains common settings and trackers', async () => {
+  mockTorrentEditorApi();
+  const { findByLabelText, findByRole, findByText } = render(<App />);
+  fireEvent.click(await findByText('archlinux-2026.05.01-x86_64.iso'));
+  fireEvent.click(await findByText('nightly.build.assets.pack'), { ctrlKey: true });
+  fireEvent.click(await findByLabelText('Edit selected torrents'));
+
+  const dialog = await findByRole('dialog', { name: 'Edit torrents' });
+  expect(within(dialog).queryByText('Torrent name')).toBeNull();
+  expect(within(dialog).queryByText('Save location')).toBeNull();
+  expect(within(dialog).queryByText('Automatic Torrent Management')).toBeNull();
+  expect(within(dialog).getByText('Download limit (B/s, 0 = unlimited)')).toBeInTheDocument();
+  expect(within(dialog).getByText(/settings with different values are hidden/i)).toBeInTheDocument();
+  expect(await within(dialog).findByText('udp://tracker.internal.local:6969/announce')).toBeInTheDocument();
+});
+
+test('torrent editor applies changed location to the selected hashes', async () => {
+  mockTorrentEditorApi();
+  const { findByLabelText, findByRole, findByText } = render(<App />);
+  fireEvent.click(await findByText('archlinux-2026.05.01-x86_64.iso'));
+  fireEvent.click(await findByLabelText('Edit selected torrents'));
+  const dialog = await findByRole('dialog', { name: 'Edit torrent' });
+  const locationInput = within(dialog).getByText('Save location').closest('label').querySelector('input');
+
+  fireEvent.change(locationInput, { target: { value: '/data/torrents/archive' } });
+  fireEvent.click(within(dialog).getByText('Apply settings'));
+
+  await waitFor(() => {
+    const call = global.fetch.mock.calls.find(([url]) => String(url).includes('/api/v2/torrents/setLocation'));
+    expect(call).toBeTruthy();
+    expect(String(call[1].body)).toBe('hashes=linux-iso-stack&location=%2Fdata%2Ftorrents%2Farchive');
+  });
+});
+
+test('torrent editor sends the qBittorrent 5.2 share-limit payload', async () => {
+  mockTorrentEditorApi();
+  const { findByLabelText, findByRole, findByText } = render(<App />);
+  fireEvent.click(await findByText('archlinux-2026.05.01-x86_64.iso'));
+  fireEvent.click(await findByLabelText('Edit selected torrents'));
+  const dialog = await findByRole('dialog', { name: 'Edit torrent' });
+  const ratioRow = within(dialog).getByText('Ratio limit').closest('label');
+
+  fireEvent.change(ratioRow.querySelector('select'), { target: { value: 'custom' } });
+  fireEvent.click(within(dialog).getByText('Apply settings'));
+
+  await waitFor(() => {
+    const call = global.fetch.mock.calls.find(([url]) => String(url).includes('/api/v2/torrents/setShareLimits'));
+    expect(call).toBeTruthy();
+    expect(String(call[1].body)).toBe(
+      'hashes=linux-iso-stack&ratioLimit=1&seedingTimeLimit=-2&inactiveSeedingTimeLimit=-2&shareLimitAction=Default'
+    );
+  });
+});
+
+test('tracker replacement is applied to every selected torrent containing the URL', async () => {
+  mockTorrentEditorApi();
+  const { findByLabelText, findByRole, findByText } = render(<App />);
+  fireEvent.click(await findByText('archlinux-2026.05.01-x86_64.iso'));
+  fireEvent.click(await findByText('public-domain-documentary-collection'), { ctrlKey: true });
+  fireEvent.click(await findByLabelText('Edit selected torrents'));
+  const dialog = await findByRole('dialog', { name: 'Edit torrents' });
+  const trackerUrl = await within(dialog).findByText('udp://tracker.opentrackr.org:1337/announce');
+  const trackerRow = trackerUrl.closest('li');
+
+  expect(within(trackerRow).getByText('2 of 2 torrents')).toBeInTheDocument();
+  fireEvent.click(within(trackerRow).getByText('Edit'));
+  const replacement = within(trackerRow).getByLabelText('Replacement URL for udp://tracker.opentrackr.org:1337/announce');
+  fireEvent.change(replacement, { target: { value: 'udp://tracker.example.test:6969/announce' } });
+  fireEvent.click(within(trackerRow).getByText('Replace'));
+
+  await waitFor(() => {
+    const calls = global.fetch.mock.calls.filter(([url]) => String(url).includes('/api/v2/torrents/editTracker'));
+    expect(calls).toHaveLength(2);
+    calls.forEach(([, options]) => {
+      expect(String(options.body)).toContain('url=udp%3A%2F%2Ftracker.opentrackr.org%3A1337%2Fannounce');
+      expect(String(options.body)).toContain('newUrl=udp%3A%2F%2Ftracker.example.test%3A6969%2Fannounce');
+    });
+  });
+});
+
+test('tracker add and confirmed remove run across the current selection', async () => {
+  mockTorrentEditorApi();
+  const { findByLabelText, findByRole, findByText } = render(<App />);
+  fireEvent.click(await findByText('archlinux-2026.05.01-x86_64.iso'));
+  fireEvent.click(await findByText('public-domain-documentary-collection'), { ctrlKey: true });
+  fireEvent.click(await findByLabelText('Edit selected torrents'));
+  const dialog = await findByRole('dialog', { name: 'Edit torrents' });
+  const addRow = within(dialog).getByText('New tracker URLs, one per line').closest('label');
+
+  fireEvent.change(addRow.querySelector('textarea'), {
+    target: { value: 'udp://tracker.new.test:80/announce' },
+  });
+  fireEvent.click(within(addRow).getByText('Add to 2'));
+
+  await waitFor(() => {
+    expect(global.fetch.mock.calls.filter(([url]) => String(url).includes('/api/v2/torrents/addTrackers')))
+      .toHaveLength(2);
+  });
+
+  const trackerUrl = await within(dialog).findByText('udp://tracker.opentrackr.org:1337/announce');
+  const trackerRow = trackerUrl.closest('li');
+  await waitFor(() => expect(within(trackerRow).getByText('Remove')).toBeEnabled());
+  fireEvent.click(within(trackerRow).getByText('Remove'));
+  fireEvent.click(within(trackerRow).getByText('Confirm 2'));
+
+  await waitFor(() => {
+    expect(global.fetch.mock.calls.filter(([url]) => String(url).includes('/api/v2/torrents/removeTrackers')))
+      .toHaveLength(2);
+  });
 });
 
 test('stopped preview torrent shows a Stopped badge', async () => {
@@ -76,12 +245,65 @@ test('tag filters support multi-select with AND matching', async () => {
   expect(queryByText('archlinux-2026.05.01-x86_64.iso')).toBeInTheDocument();
 });
 
+test('double-click excludes a tag and a single click returns it to neutral', async () => {
+  const { findByLabelText, findByText, queryByText } = render(<App />);
+  await findByText('archlinux-2026.05.01-x86_64.iso');
+  const tagNav = await findByLabelText('Tag filters');
+  const linuxButton = within(tagNav).getByText('linux').closest('button');
+
+  fireBrowserDoubleClick(linuxButton);
+  expect(linuxButton).toHaveClass('excluded');
+  expect(linuxButton).not.toHaveClass('active');
+  expect(queryByText('archlinux-2026.05.01-x86_64.iso')).toBeNull();
+  expect(queryByText('nightly.build.assets.pack')).toBeInTheDocument();
+  expect(JSON.parse(window.localStorage.getItem('qbitctl.appState.v1')).excludedTagFilters)
+    .toEqual(['linux']);
+
+  fireEvent.click(linuxButton);
+  expect(linuxButton).not.toHaveClass('excluded');
+  expect(linuxButton).not.toHaveClass('active');
+  expect(queryByText('archlinux-2026.05.01-x86_64.iso')).toBeInTheDocument();
+
+  fireEvent.click(linuxButton);
+  expect(linuxButton).toHaveClass('active');
+  expect(queryByText('archlinux-2026.05.01-x86_64.iso')).toBeInTheDocument();
+  expect(queryByText('nightly.build.assets.pack')).toBeNull();
+});
+
+test('category exclusions can be combined and return to neutral on click', async () => {
+  const { findByLabelText, findByText, queryByText } = render(<App />);
+  await findByText('archlinux-2026.05.01-x86_64.iso');
+  const categoryNav = await findByLabelText('Category filters');
+  const linuxButton = within(categoryNav).getByText('linux').closest('button');
+  const workButton = within(categoryNav).getByText('work').closest('button');
+
+  fireBrowserDoubleClick(linuxButton);
+  fireBrowserDoubleClick(workButton);
+  expect(linuxButton).toHaveClass('excluded');
+  expect(workButton).toHaveClass('excluded');
+  expect(queryByText('archlinux-2026.05.01-x86_64.iso')).toBeNull();
+  expect(queryByText('nightly.build.assets.pack')).toBeNull();
+  expect(JSON.parse(window.localStorage.getItem('qbitctl.appState.v1')).excludedCategories)
+    .toEqual(['linux', 'work']);
+
+  fireEvent.click(linuxButton);
+  expect(linuxButton).not.toHaveClass('excluded');
+  expect(linuxButton).not.toHaveClass('active');
+  expect(queryByText('archlinux-2026.05.01-x86_64.iso')).toBeInTheDocument();
+  expect(queryByText('nightly.build.assets.pack')).toBeNull();
+
+  fireEvent.click(linuxButton);
+  expect(linuxButton).toHaveClass('active');
+  expect(queryByText('archlinux-2026.05.01-x86_64.iso')).toBeInTheDocument();
+  expect(queryByText('public-domain-documentary-collection')).toBeNull();
+});
+
 test('activity graph labels the Y axis with only the peak value', async () => {
   const { findByLabelText, findByText } = render(<App />);
   await findByText('archlinux-2026.05.01-x86_64.iso');
   const graph = await findByLabelText('Last hour speed graph');
 
-  // Preview totals peak at 11.8 MB/s down -> only the max label is shown.
+  // Fixture totals peak at 11.8 MB/s down -> only the max label is shown.
   expect(within(graph).getByText('11M')).toBeInTheDocument();
   expect(within(graph).queryByText('5.6M')).toBeNull();
   expect(within(graph).queryByText('0')).toBeNull();
@@ -139,11 +361,14 @@ function githubWasCalled() {
   return global.fetch.mock.calls.some(([url]) => String(url).includes('api.github.com'));
 }
 
-test('preview mode shows an IP placeholder and never calls third-party IP services', async () => {
-  const { findByText, getByText } = render(<App />);
-  await findByText('archlinux-2026.05.01-x86_64.iso');
+test('API failure shows the full disconnected page instead of preview torrents', async () => {
+  global.fetch.mockImplementation(() => Promise.reject(new Error('offline')));
+  const { container, findByText, queryByText } = render(<App />);
 
-  expect(getByText('xxx.xxx.xxx.xxx')).toBeInTheDocument();
+  expect(await findByText('Disconnected')).toBeInTheDocument();
+  expect(container.querySelector('.disconnected-shell')).toBeInTheDocument();
+  expect(container.querySelectorAll('.disconnected-signal span')).toHaveLength(3);
+  expect(queryByText('archlinux-2026.05.01-x86_64.iso')).toBeNull();
   expect(global.fetch.mock.calls.some(([url]) => String(url).includes('ipify'))).toBe(false);
 });
 
@@ -167,8 +392,8 @@ test('version button opens the version modal when opted in', async () => {
   const { findByText, getByText, getByTitle, queryByText } = render(<App />);
   await findByText('archlinux-2026.05.01-x86_64.iso');
 
-  // The old "live/preview" connection block is gone.
-  expect(queryByText('preview')).toBeNull();
+  // The old connection-state block is gone.
+  expect(queryByText('live')).toBeNull();
 
   const button = getByTitle('Version details');
   expect(button).toHaveTextContent('v1.2.0');
@@ -309,7 +534,7 @@ test('queue column shows positions and a dash for unqueued torrents', async () =
   expect(within(seedRow).queryByLabelText('Move down in queue')).toBeNull();
 });
 
-test('queue chevrons do not select the row and stay local in preview mode', async () => {
+test('queue chevrons do not select the row', async () => {
   const { container, findByText, getByText, queryByText } = render(<App />);
   await findByText('nightly.build.assets.pack');
 
@@ -318,7 +543,6 @@ test('queue chevrons do not select the row and stay local in preview mode', asyn
 
   expect(container.querySelector('.torrent-row.selected')).toBeNull();
   expect(queryByText('ETA')).toBeNull();
-  expect(global.fetch.mock.calls.some(([url]) => String(url).includes('Prio'))).toBe(false);
 });
 
 test('sorting by # orders the queue and sinks unqueued torrents', async () => {

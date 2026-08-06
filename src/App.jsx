@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useState } from 'react';
 import './App.css';
 import AddTorrentModal from './components/AddTorrentModal';
+import DisconnectedPage from './components/DisconnectedPage';
 import LoginPage from './components/LoginPage';
 import RemoveTorrentModal from './components/RemoveTorrentModal';
 import SelectedPanel from './components/SelectedPanel';
@@ -8,13 +9,15 @@ import SettingsPanel from './components/SettingsPanel';
 import Sidebar from './components/Sidebar';
 import TagEditor from './components/TagEditor';
 import TorrentTable from './components/TorrentTable';
+import TorrentEditor from './components/TorrentEditor';
 import VersionModal from './components/VersionModal';
 import { createInitialSpeedHistory } from './components/SpeedHistoryGraph';
 import { COLUMNS, DEFAULT_SETTINGS, GITHUB_REPO } from './lib/constants';
 import { isNewerVersion } from './lib/format';
-import { SAMPLE_TORRENTS } from './lib/sampleData';
 import {
   APP_STATE_STORAGE_KEY,
+  normalizeExcludedCategories,
+  normalizeExcludedTagFilters,
   normalizeFilter,
   normalizeSort,
   normalizeTagFilters,
@@ -23,6 +26,12 @@ import {
   readStoredUiSettings,
   writeAppState,
 } from './lib/storage';
+import {
+  compareApiVersions,
+  editableTrackers,
+  getChangedTorrentFields,
+  usesCurrentTrackerEditParameter,
+} from './lib/torrentEditor';
 import {
   compareTorrents,
   getExternalAddress,
@@ -41,7 +50,9 @@ function App() {
   const [lastClickedHash, setLastClickedHash] = useState('');
   const [activeFilter, setActiveFilter] = useState(() => normalizeFilter(readAppState().activeFilter));
   const [categoryFilter, setCategoryFilter] = useState(() => readAppState().categoryFilter || '');
+  const [excludedCategories, setExcludedCategories] = useState(() => normalizeExcludedCategories(readAppState()));
   const [tagFilters, setTagFilters] = useState(() => normalizeTagFilters(readAppState()));
+  const [excludedTagFilters, setExcludedTagFilters] = useState(() => normalizeExcludedTagFilters(readAppState()));
   const [query, setQuery] = useState(() => readAppState().query || '');
   const [sort, setSort] = useState(() => normalizeSort(readAppState().sort));
   const [status, setStatus] = useState('connecting');
@@ -69,9 +80,16 @@ function App() {
   const [selectedMeta, setSelectedMeta] = useState({});
   const [tagEditorOpen, setTagEditorOpen] = useState(false);
   const [tagDraft, setTagDraft] = useState('');
+  const [torrentEditorOpen, setTorrentEditorOpen] = useState(false);
+  const [torrentEditorTrackers, setTorrentEditorTrackers] = useState({});
+  const [torrentEditorLoading, setTorrentEditorLoading] = useState(false);
+  const [torrentEditorBusy, setTorrentEditorBusy] = useState(false);
+  const [torrentEditorTrackerBusy, setTorrentEditorTrackerBusy] = useState('');
+  const [torrentEditorNotice, setTorrentEditorNotice] = useState(null);
   const [versionModalOpen, setVersionModalOpen] = useState(false);
   const [latestRelease, setLatestRelease] = useState({ version: '', notes: '', url: '', checked: false });
   const [qbtVersion, setQbtVersion] = useState('');
+  const [webApiVersion, setWebApiVersion] = useState('');
   const [loginError, setLoginError] = useState('');
   const [loginBusy, setLoginBusy] = useState(false);
   const [authNonce, setAuthNonce] = useState(0);
@@ -111,8 +129,8 @@ function App() {
         if (!isMounted) {
           return;
         }
-        setTorrents(SAMPLE_TORRENTS);
-        setStatus('preview');
+        setTorrents([]);
+        setStatus('disconnected');
         setLastSync(new Date().toLocaleTimeString());
       }
     }
@@ -145,13 +163,15 @@ function App() {
     writeAppState({
       activeFilter,
       categoryFilter,
+      excludedCategories,
+      excludedTagFilters,
       query,
       sort,
       // Drop the legacy single-tag key; JSON.stringify omits undefined values.
       tagFilter: undefined,
       tagFilters,
     });
-  }, [activeFilter, categoryFilter, query, sort, tagFilters]);
+  }, [activeFilter, categoryFilter, excludedCategories, excludedTagFilters, query, sort, tagFilters]);
 
   // The GitHub release check is opt-in: while the version button is disabled
   // (the default) no request is made at all. When enabled it runs at most
@@ -201,6 +221,24 @@ function App() {
   }, [status, qbtVersion]);
 
   useEffect(() => {
+    if (status !== 'live' || webApiVersion) {
+      return;
+    }
+    let cancelled = false;
+    fetch('/api/v2/app/webapiVersion', { credentials: 'same-origin' })
+      .then(response => (response.ok ? response.text() : ''))
+      .then(version => {
+        if (!cancelled && version) {
+          setWebApiVersion(version.trim());
+        }
+      })
+      .catch(() => {});
+    return () => {
+      cancelled = true;
+    };
+  }, [status, webApiVersion]);
+
+  useEffect(() => {
     writeAppState({
       settings: pickUiSettings(settings),
     });
@@ -214,7 +252,9 @@ function App() {
       const nextState = readAppState();
       setActiveFilter(normalizeFilter(nextState.activeFilter));
       setCategoryFilter(nextState.categoryFilter || '');
+      setExcludedCategories(normalizeExcludedCategories(nextState));
       setTagFilters(normalizeTagFilters(nextState));
+      setExcludedTagFilters(normalizeExcludedTagFilters(nextState));
       setQuery(nextState.query || '');
       setSort(normalizeSort(nextState.sort));
       setSettings(current => ({
@@ -334,16 +374,16 @@ function App() {
     return torrents.filter(torrent => {
       const matchesFilter = matchesStateFilter(torrent, activeFilter);
       const matchesCategory = settings.ui_show_category_filters === false ||
-        !categoryFilter ||
-        torrent.category === categoryFilter;
+        ((!categoryFilter || torrent.category === categoryFilter) &&
+          !excludedCategories.includes(torrent.category));
       const torrentTags = parseTags(torrent.tags);
       const matchesTag = settings.ui_show_tag_filters === false ||
-        !tagFilters.length ||
-        tagFilters.every(tag => torrentTags.includes(tag));
+        ((!tagFilters.length || tagFilters.every(tag => torrentTags.includes(tag))) &&
+          !excludedTagFilters.some(tag => torrentTags.includes(tag)));
       const matchesQuery = searchableTorrentText(torrent).includes(query.trim().toLowerCase());
       return matchesFilter && matchesCategory && matchesTag && matchesQuery;
     });
-  }, [activeFilter, categoryFilter, query, settings.ui_show_category_filters, settings.ui_show_tag_filters, tagFilters, torrents]);
+  }, [activeFilter, categoryFilter, excludedCategories, excludedTagFilters, query, settings.ui_show_category_filters, settings.ui_show_tag_filters, tagFilters, torrents]);
 
   const visibleTorrents = useMemo(() => {
     const next = filteredTorrents.slice();
@@ -381,6 +421,15 @@ function App() {
 
   const selectedCount = selectedHashes.length;
   const selectedActionHashes = selectedHashes.length ? selectedHashes : primaryHash ? [primaryHash] : [];
+  const selectedTorrents = useMemo(
+    () => selectedActionHashes
+      .map(hash => torrents.find(torrent => torrent.hash === hash))
+      .filter(Boolean),
+    // selectedActionHashes is derived from these two stable state values.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [primaryHash, selectedHashes, torrents]
+  );
+  const torrentEditorApiVersion = webApiVersion || '2.15.0';
 
   const showQueueColumn = settings.ui_show_queue_column !== false;
   const tableColumns = showQueueColumn
@@ -481,7 +530,6 @@ function App() {
       return;
     }
     if (status !== 'live') {
-      flashPreviewAction();
       return;
     }
     const to = direction === 'up' ? from - 1 : from + 1;
@@ -507,11 +555,43 @@ function App() {
   }
 
   function toggleTagFilter(tag) {
+    if (excludedTagFilters.includes(tag)) {
+      setExcludedTagFilters(current => current.filter(item => item !== tag));
+      return;
+    }
     setTagFilters(current =>
       current.includes(tag)
         ? current.filter(item => item !== tag)
         : current.concat(tag)
     );
+  }
+
+  function excludeTagFilter(tag) {
+    setTagFilters(current => current.filter(item => item !== tag));
+    setExcludedTagFilters(current => current.includes(tag) ? current : current.concat(tag));
+  }
+
+  function toggleCategoryFilter(category) {
+    if (excludedCategories.includes(category)) {
+      setExcludedCategories(current => current.filter(item => item !== category));
+      return;
+    }
+    setCategoryFilter(current => current === category ? '' : category);
+  }
+
+  function excludeCategoryFilter(category) {
+    setCategoryFilter(current => current === category ? '' : current);
+    setExcludedCategories(current => current.includes(category) ? current : current.concat(category));
+  }
+
+  function resetCategoryFilters() {
+    setCategoryFilter('');
+    setExcludedCategories([]);
+  }
+
+  function resetTagFilters() {
+    setTagFilters([]);
+    setExcludedTagFilters([]);
   }
 
   function handleAction(action) {
@@ -531,22 +611,12 @@ function App() {
     };
 
     if (status !== 'live') {
-      flashPreviewAction();
       return;
     }
 
     const body = new URLSearchParams({ hashes: selectedActionHashes.join('|') });
 
     postFirstAvailable(actionMap[action], body);
-  }
-
-  // Briefly flag preview-mode actions. The timeout only downgrades the flash
-  // itself, so a concurrent switch to another status (e.g. auth) sticks.
-  function flashPreviewAction() {
-    setStatus('preview action');
-    window.setTimeout(() => {
-      setStatus(current => (current === 'preview action' ? 'preview' : current));
-    }, 1200);
   }
 
   function logIn(username, password) {
@@ -593,6 +663,7 @@ function App() {
     closeAddModal();
     setRemoveOpen(false);
     setTagEditorOpen(false);
+    setTorrentEditorOpen(false);
     setVersionModalOpen(false);
     clearSelection();
     setTorrents([]);
@@ -605,7 +676,6 @@ function App() {
       return;
     }
     if (status !== 'live') {
-      flashPreviewAction();
       return;
     }
     postFirstAvailable(['/api/v2/torrents/reannounce'], new URLSearchParams({ hashes: hash }));
@@ -630,6 +700,20 @@ function App() {
     });
   }
 
+  async function postForm(url, values) {
+    const response = await fetch(url, {
+      method: 'POST',
+      credentials: 'same-origin',
+      headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+      body: values instanceof URLSearchParams ? values : new URLSearchParams(values),
+    });
+    if (!response.ok) {
+      const detail = (await response.text().catch(() => '')).trim();
+      throw new Error(detail || `qBittorrent returned HTTP ${response.status}`);
+    }
+    return response;
+  }
+
   function confirmRemove() {
     if (!selectedActionHashes.length) {
       setRemoveOpen(false);
@@ -637,7 +721,6 @@ function App() {
     }
 
     if (status !== 'live') {
-      flashPreviewAction();
       setRemoveOpen(false);
       return;
     }
@@ -679,7 +762,7 @@ function App() {
     }
 
     if (status !== 'live') {
-      setAddNotice('Preview mode: torrent add is not sent to qBittorrent.');
+      setAddNotice('Not connected: torrent add was not sent to qBittorrent.');
       return;
     }
 
@@ -718,7 +801,7 @@ function App() {
 
   function saveSettings() {
     if (status !== 'live') {
-      setNotice('Preview mode: settings are shown but not written to qBittorrent.');
+      setNotice('Not connected: settings were not written to qBittorrent.');
       return;
     }
     fetch('/api/v2/app/setPreferences', {
@@ -739,7 +822,7 @@ function App() {
   function revertWebUI() {
     if (status !== 'live') {
       updateSetting('alternative_webui_enabled', false);
-      setNotice('Preview mode: disable Alternative WebUI in qBittorrent to revert.');
+      setNotice('Not connected: disable Alternative WebUI in qBittorrent to revert.');
       return;
     }
     fetch('/api/v2/app/setPreferences', {
@@ -758,6 +841,260 @@ function App() {
       .catch(() => setNotice('Could not disable Alternative WebUI from here.'));
   }
 
+  async function loadTorrentEditorTrackers(torrentList = selectedTorrents, reportFailures = true) {
+    if (!torrentList.length || status !== 'live') {
+      setTorrentEditorTrackers({});
+      return;
+    }
+    setTorrentEditorLoading(true);
+    const results = await Promise.allSettled(torrentList.map(async torrent => {
+      const response = await fetch(`/api/v2/torrents/trackers?hash=${encodeURIComponent(torrent.hash)}`, {
+        credentials: 'same-origin',
+      });
+      if (!response.ok) {
+        throw new Error(`HTTP ${response.status}`);
+      }
+      return [torrent.hash, await response.json()];
+    }));
+    const nextTrackers = {};
+    results.forEach((result, index) => {
+      if (result.status === 'fulfilled') {
+        const [hash, trackers] = result.value;
+        nextTrackers[hash] = trackers;
+      } else {
+        nextTrackers[torrentList[index].hash] = [];
+      }
+    });
+    setTorrentEditorTrackers(nextTrackers);
+    setTorrentEditorLoading(false);
+    const failures = results.filter(result => result.status === 'rejected').length;
+    if (reportFailures && failures) {
+      setTorrentEditorNotice({
+        tone: 'warning',
+        text: `Could not load trackers for ${failures} of ${torrentList.length} torrents.`,
+      });
+    }
+  }
+
+  function openTorrentEditor() {
+    if (!selectedTorrents.length || status !== 'live') {
+      return;
+    }
+    setTorrentEditorNotice(null);
+    setTorrentEditorTrackers({});
+    setTorrentEditorOpen(true);
+    loadTorrentEditorTrackers(selectedTorrents);
+  }
+
+  function closeTorrentEditor() {
+    if (torrentEditorBusy || torrentEditorTrackerBusy) {
+      return;
+    }
+    setTorrentEditorOpen(false);
+    setTorrentEditorTrackers({});
+    setTorrentEditorNotice(null);
+  }
+
+  async function saveTorrentEdits(initialDraft, draft) {
+    const changed = getChangedTorrentFields(initialDraft, draft);
+    const changedKeys = Object.keys(changed);
+    if (!changedKeys.length) {
+      setTorrentEditorNotice({ tone: 'muted', text: 'No settings changed.' });
+      return;
+    }
+    if (!selectedTorrents.length || status !== 'live') {
+      setTorrentEditorNotice({ tone: 'error', text: 'No connected torrents are selected.' });
+      return;
+    }
+
+    setTorrentEditorBusy(true);
+    setTorrentEditorNotice({ tone: 'muted', text: 'Applying changes…' });
+    const hashes = selectedTorrents.map(torrent => torrent.hash);
+    const joinedHashes = hashes.join('|');
+    const requests = [];
+    const queue = (label, url, values) => {
+      requests.push({ label, run: () => postForm(url, values) });
+    };
+    let autoManagementRequest = null;
+
+    if (Object.hasOwn(changed, 'name')) {
+      hashes.forEach(hash => queue('name', '/api/v2/torrents/rename', { hash, name: changed.name }));
+    }
+    if (Object.hasOwn(changed, 'save_path')) {
+      queue('save location', '/api/v2/torrents/setLocation', { hashes: joinedHashes, location: changed.save_path });
+    }
+    if (Object.hasOwn(changed, 'category')) {
+      queue('category', '/api/v2/torrents/setCategory', { hashes: joinedHashes, category: changed.category });
+    }
+    if (Object.hasOwn(changed, 'comment')) {
+      queue('comment', '/api/v2/torrents/setComment', { hashes: joinedHashes, comment: changed.comment });
+    }
+    if (Object.hasOwn(changed, 'dl_limit')) {
+      queue('download limit', '/api/v2/torrents/setDownloadLimit', { hashes: joinedHashes, limit: changed.dl_limit });
+    }
+    if (Object.hasOwn(changed, 'up_limit')) {
+      queue('upload limit', '/api/v2/torrents/setUploadLimit', { hashes: joinedHashes, limit: changed.up_limit });
+    }
+    if (Object.hasOwn(changed, 'auto_tmm')) {
+      // setLocation disables Auto TMM, so this request runs after the main
+      // batch to make the explicit checkbox value the final state.
+      autoManagementRequest = {
+        label: 'automatic management',
+        run: () => postForm('/api/v2/torrents/setAutoManagement', { hashes: joinedHashes, enable: changed.auto_tmm }),
+      };
+    }
+    if (Object.hasOwn(changed, 'force_start')) {
+      queue('force start', '/api/v2/torrents/setForceStart', { hashes: joinedHashes, value: changed.force_start });
+    }
+    if (Object.hasOwn(changed, 'super_seeding')) {
+      queue('super seeding', '/api/v2/torrents/setSuperSeeding', { hashes: joinedHashes, value: changed.super_seeding });
+    }
+    if (Object.hasOwn(changed, 'seq_dl')) {
+      queue('sequential download', '/api/v2/torrents/toggleSequentialDownload', { hashes: joinedHashes });
+    }
+    if (Object.hasOwn(changed, 'f_l_piece_prio')) {
+      queue('first/last piece priority', '/api/v2/torrents/toggleFirstLastPiecePrio', { hashes: joinedHashes });
+    }
+
+    const shareKeys = ['ratio_limit', 'seeding_time_limit', 'inactive_seeding_time_limit', 'share_limit_action'];
+    if (shareKeys.some(key => Object.hasOwn(changed, key))) {
+      selectedTorrents.forEach(torrent => {
+        const values = {
+          hashes: torrent.hash,
+          ratioLimit: Object.hasOwn(changed, 'ratio_limit') ? changed.ratio_limit : torrent.ratio_limit ?? -2,
+          seedingTimeLimit: Object.hasOwn(changed, 'seeding_time_limit') ? changed.seeding_time_limit : torrent.seeding_time_limit ?? -2,
+          inactiveSeedingTimeLimit: Object.hasOwn(changed, 'inactive_seeding_time_limit')
+            ? changed.inactive_seeding_time_limit
+            : torrent.inactive_seeding_time_limit ?? -2,
+        };
+        if (compareApiVersions(torrentEditorApiVersion, '2.12.0') >= 0) {
+          values.shareLimitAction = Object.hasOwn(changed, 'share_limit_action')
+            ? changed.share_limit_action
+            : torrent.share_limit_action || 'Default';
+        }
+        if (compareApiVersions(torrentEditorApiVersion, '2.15.3') >= 0) {
+          values.shareLimitsMode = torrent.share_limits_mode || 'Default';
+        }
+        queue('share limits', '/api/v2/torrents/setShareLimits', values);
+      });
+    }
+
+    if (Object.hasOwn(changed, 'tags')) {
+      const nextTags = parseTags(changed.tags);
+      if (nextTags.length) {
+        try {
+          await postForm('/api/v2/torrents/createTags', { tags: nextTags.join(',') });
+        } catch {
+          // Existing tags can still be assigned when createTags is unavailable
+          // or reports a duplicate; the per-torrent calls below are authoritative.
+        }
+      }
+      selectedTorrents.forEach(torrent => {
+        const oldTags = parseTags(torrent.tags);
+        const toRemove = oldTags.filter(tag => !nextTags.includes(tag));
+        const toAdd = nextTags.filter(tag => !oldTags.includes(tag));
+        if (toRemove.length) {
+          queue('tags', '/api/v2/torrents/removeTags', { hashes: torrent.hash, tags: toRemove.join(',') });
+        }
+        if (toAdd.length) {
+          queue('tags', '/api/v2/torrents/addTags', { hashes: torrent.hash, tags: toAdd.join(',') });
+        }
+      });
+    }
+
+    const results = await Promise.allSettled(requests.map(request => request.run()));
+    if (autoManagementRequest) {
+      requests.push(autoManagementRequest);
+      results.push(...await Promise.allSettled([autoManagementRequest.run()]));
+    }
+    const failures = results
+      .map((result, index) => ({ result, label: requests[index].label }))
+      .filter(item => item.result.status === 'rejected');
+
+    if (failures.length) {
+      const labels = Array.from(new Set(failures.map(failure => failure.label))).join(', ');
+      setTorrentEditorNotice({
+        tone: 'error',
+        text: `${failures.length} update${failures.length === 1 ? '' : 's'} failed: ${labels}. Other changes may have succeeded.`,
+      });
+      setTorrentEditorBusy(false);
+      return;
+    }
+
+    setTorrents(current => current.map(torrent => {
+      if (!hashes.includes(torrent.hash)) {
+        return torrent;
+      }
+      const next = { ...torrent, ...changed };
+      if (Object.hasOwn(changed, 'tags')) {
+        next.tags = parseTags(changed.tags).join(', ');
+      }
+      if (Object.hasOwn(changed, 'save_path') && !Object.hasOwn(changed, 'auto_tmm')) {
+        next.auto_tmm = false;
+      }
+      return next;
+    }));
+    setLastSync(new Date().toLocaleTimeString());
+    setTorrentEditorBusy(false);
+    setTorrentEditorOpen(false);
+    setTorrentEditorTrackers({});
+  }
+
+  async function runTrackerAction(action, targetHashes, valuesForHash) {
+    if (!targetHashes.length || status !== 'live') {
+      return false;
+    }
+    setTorrentEditorTrackerBusy(action);
+    setTorrentEditorNotice({ tone: 'muted', text: `${action}…` });
+    const results = await Promise.allSettled(targetHashes.map(hash => {
+      return postForm(valuesForHash.url, valuesForHash.params(hash));
+    }));
+    const failures = results.filter(result => result.status === 'rejected').length;
+    await loadTorrentEditorTrackers(selectedTorrents, false);
+    setTorrentEditorTrackerBusy('');
+    if (failures) {
+      setTorrentEditorNotice({
+        tone: failures === results.length ? 'error' : 'warning',
+        text: `${action} failed for ${failures} of ${results.length} torrents.`,
+      });
+      return false;
+    }
+    setTorrentEditorNotice({ tone: 'success', text: `${action} completed for ${results.length} torrent${results.length === 1 ? '' : 's'}.` });
+    return true;
+  }
+
+  function addTorrentTrackers(urls) {
+    return runTrackerAction('Adding trackers', selectedTorrents.map(torrent => torrent.hash), {
+      url: '/api/v2/torrents/addTrackers',
+      params: hash => ({ hash, urls: urls.join('\n') }),
+    });
+  }
+
+  function editTorrentTracker(originalUrl, newUrl) {
+    const targetHashes = selectedTorrents
+      .filter(torrent => editableTrackers(torrentEditorTrackers[torrent.hash]).some(tracker => {
+        return (typeof tracker === 'string' ? tracker : tracker.url) === originalUrl;
+      }))
+      .map(torrent => torrent.hash);
+    const originalParameter = usesCurrentTrackerEditParameter(torrentEditorApiVersion) ? 'url' : 'origUrl';
+    return runTrackerAction('Replacing tracker', targetHashes, {
+      url: '/api/v2/torrents/editTracker',
+      params: hash => ({ hash, [originalParameter]: originalUrl, newUrl }),
+    });
+  }
+
+  function removeTorrentTracker(url) {
+    const targetHashes = selectedTorrents
+      .filter(torrent => editableTrackers(torrentEditorTrackers[torrent.hash]).some(tracker => {
+        return (typeof tracker === 'string' ? tracker : tracker.url) === url;
+      }))
+      .map(torrent => torrent.hash);
+    return runTrackerAction('Removing tracker', targetHashes, {
+      url: '/api/v2/torrents/removeTrackers',
+      params: hash => ({ hash, urls: encodeURIComponent(url) }),
+    });
+  }
+
   function openTagEditor() {
     if (!selectedTorrent) {
       return;
@@ -770,11 +1107,10 @@ function App() {
     if (!selectedTorrent) {
       return;
     }
-    const oldTags = parseTags(selectedTorrent.tags);
     const nextTags = parseTags(tagDraft);
     setTorrents(current =>
       current.map(torrent =>
-        selectedHashes.includes(torrent.hash)
+        selectedActionHashes.includes(torrent.hash)
           ? { ...torrent, tags: nextTags.join(', ') }
           : torrent
       )
@@ -782,31 +1118,31 @@ function App() {
     setTagEditorOpen(false);
 
     if (status === 'live') {
-      const hashes = selectedActionHashes.join('|');
-      const toRemove = oldTags.filter(tag => !nextTags.includes(tag));
-      const toAdd = nextTags.filter(tag => !oldTags.includes(tag));
-      if (toRemove.length) {
-        fetch('/api/v2/torrents/removeTags', {
-          method: 'POST',
-          credentials: 'same-origin',
-          headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
-          body: new URLSearchParams({ hashes, tags: toRemove.join(',') }),
-        });
-      }
-      if (toAdd.length) {
+      if (nextTags.length) {
         fetch('/api/v2/torrents/createTags', {
           method: 'POST',
           credentials: 'same-origin',
           headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
-          body: new URLSearchParams({ tags: toAdd.join(',') }),
-        });
-        fetch('/api/v2/torrents/addTags', {
-          method: 'POST',
-          credentials: 'same-origin',
-          headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
-          body: new URLSearchParams({ hashes, tags: toAdd.join(',') }),
+          body: new URLSearchParams({ tags: nextTags.join(',') }),
         });
       }
+      selectedTorrents.forEach(torrent => {
+        const oldTags = parseTags(torrent.tags);
+        const toRemove = oldTags.filter(tag => !nextTags.includes(tag));
+        const toAdd = nextTags.filter(tag => !oldTags.includes(tag));
+        if (toRemove.length) {
+          postForm('/api/v2/torrents/removeTags', {
+            hashes: torrent.hash,
+            tags: toRemove.join(','),
+          }).catch(() => {});
+        }
+        if (toAdd.length) {
+          postForm('/api/v2/torrents/addTags', {
+            hashes: torrent.hash,
+            tags: toAdd.join(','),
+          }).catch(() => {});
+        }
+      });
     }
   }
 
@@ -823,6 +1159,10 @@ function App() {
     );
   }
 
+  if (status === 'disconnected') {
+    return <DisconnectedPage accent={settings.ui_accent_color || '#f07b24'} />;
+  }
+
   return (
     <div
       className={`terminal-shell ${showDetailsPanel ? '' : 'details-closed'} ${
@@ -835,11 +1175,16 @@ function App() {
         appVersion={appVersion}
         categories={categories}
         categoryFilter={categoryFilter}
+        excludedCategories={excludedCategories}
+        excludedTagFilters={excludedTagFilters}
         latestRelease={latestRelease}
-        onCategoryFilter={setCategoryFilter}
+        onExcludeCategory={excludeCategoryFilter}
+        onExcludeTag={excludeTagFilter}
         onFilter={setActiveFilter}
         onOpenVersion={() => setVersionModalOpen(true)}
-        onResetTagFilters={() => setTagFilters([])}
+        onResetCategoryFilters={resetCategoryFilters}
+        onResetTagFilters={resetTagFilters}
+        onToggleCategory={toggleCategoryFilter}
         onToggleTag={toggleTagFilter}
         sessionInfo={sessionInfo}
         settings={settings}
@@ -862,6 +1207,19 @@ function App() {
             <button onClick={() => handleAction('resume')} type="button">Resume</button>
             <button onClick={() => handleAction('stop')} type="button">Stop</button>
             <button onClick={() => handleAction('recheck')} type="button">Recheck</button>
+            <button
+              aria-label="Edit selected torrents"
+              className="edit-torrents-button"
+              disabled={!selectedActionHashes.length || status !== 'live'}
+              onClick={openTorrentEditor}
+              title="Edit selected torrents"
+              type="button"
+            >
+              <svg aria-hidden="true" viewBox="0 0 24 24">
+                <path d="M6 3.75h7.25L18 8.5v3.25M13 3.75V8.5h5M5.5 20.25h3.25l9.5-9.5-3.25-3.25-9.5 9.5v3.25Z" />
+                <path d="m13.75 8.75 3.25 3.25" />
+              </svg>
+            </button>
             <button className="danger" onClick={() => handleAction('delete')} type="button">Remove</button>
             <button
               aria-label="Settings"
@@ -967,6 +1325,26 @@ function App() {
           onSave={saveTags}
           onUpdate={setTagDraft}
           selectedCount={selectedCount}
+        />
+      )}
+
+      {torrentEditorOpen && selectedTorrents.length > 0 && (
+        <TorrentEditor
+          allCategories={categories}
+          allTags={tags}
+          apiVersion={torrentEditorApiVersion}
+          busy={torrentEditorBusy}
+          key={selectedActionHashes.join('|')}
+          loadingTrackers={torrentEditorLoading}
+          notice={torrentEditorNotice}
+          onClose={closeTorrentEditor}
+          onSave={saveTorrentEdits}
+          onTrackerAdd={addTorrentTrackers}
+          onTrackerEdit={editTorrentTracker}
+          onTrackerRemove={removeTorrentTracker}
+          selectedTorrents={selectedTorrents}
+          trackerBusy={torrentEditorTrackerBusy}
+          trackersByHash={torrentEditorTrackers}
         />
       )}
 

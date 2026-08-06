@@ -25,8 +25,11 @@ Dark, terminal-inspired qBittorrent WebUI built with React. The interface keeps 
 - Sortable torrent table (name, status, progress, down/up speed, ratio, added date) with a sticky header and toolbar.
 - Status filters for all, active, downloading, seeding, stopped, and stalled torrents, plus category filters, all with live counts.
 - Multi-select tag filters with AND matching: a torrent must carry every selected tag to show.
+- Double-click category or tag filters to exclude matching torrents; excluded filters are highlighted in red.
 - Search bar matching name, hash, category, tags, status, and save path.
 - Multi-select rows with Shift, Cmd, or Ctrl for resume, stop, recheck, and remove actions.
+- Single- and multi-torrent editor for names, locations, categories, tags, comments, transfer/share limits, and torrent-specific behaviour. Multi-selection only exposes settings shared by every selected torrent.
+- Batch tracker management with add, replace, and confirmed removal across the current selection, including per-URL torrent counts and partial-failure feedback.
 - Remove confirmation modal with an optional `Delete downloaded data` checkbox (off by default).
 - Add modal accepting multiple `.torrent` files and magnet/URL paste, with tags applied at add time and an `Add stopped` option for import workflows (add stopped, recheck, then resume).
 
@@ -51,7 +54,7 @@ Dark, terminal-inspired qBittorrent WebUI built with React. The interface keeps 
 - Login page using qBittorrent's WebUI credentials when authentication is required, with logout from the settings panel.
 - Opt-in version update check (off by default — no GitHub request is made unless you enable it in settings): adds a sidebar version button that checks GitHub once per page load, highlights available updates, and opens a modal with the changelog, the release link, and the connected qBittorrent version.
 - Works with both qBittorrent API generations (`torrents/start`/`torrents/stop` with fallback to `torrents/resume`/`torrents/pause`).
-- Preview mode with sample data whenever the qBittorrent API is unreachable, for local development.
+- Full-page disconnected state when the qBittorrent API is unreachable, with automatic reconnection polling.
 - Release pipeline that tests, builds, generates a changelog, and uploads `qbitctl-<version>.zip` plus a stable-URL `qbitctl.zip`.
 
 ## Install From A Release
@@ -91,7 +94,7 @@ yarn install --frozen-lockfile
 yarn start
 ```
 
-This starts the Vite dev server on `http://localhost:3000`. Without a reachable qBittorrent API the UI falls back to built-in preview data, so you can develop the interface without a running qBittorrent instance. To develop against a live qBittorrent, set `QBIT_URL` to its address and the dev server proxies `/api` calls to it:
+This starts the Vite dev server on `http://localhost:3000`. Without a reachable qBittorrent API the UI shows its disconnected state. To develop against a live qBittorrent, set `QBIT_URL` to its address and the dev server proxies `/api` calls to it:
 
 ```bash
 QBIT_URL=http://localhost:8080 yarn start
@@ -134,11 +137,11 @@ The workflow can also be run manually from GitHub Actions with an optional versi
 
 ## qBittorrent API Notes
 
-qbitctl expects to be served by qBittorrent as an alternative WebUI. Live mode uses the same-origin qBittorrent API endpoints under `/api/v2/*`. When run locally with `yarn start`, it falls back to preview data when the qBittorrent API is not available.
+qbitctl expects to be served by qBittorrent as an alternative WebUI. Live mode uses the same-origin qBittorrent API endpoints under `/api/v2/*`. When the API is unavailable, the UI shows a disconnected page and continues polling for recovery.
 
 ## Privacy
 
-The repository does not include personal IP addresses, tokens, qBittorrent credentials, or local configuration files. The external IP and free space shown in the sidebar come exclusively from your own qBittorrent API in live mode (no third-party IP services are contacted; preview mode shows a placeholder), and the optional version update check only contacts GitHub when explicitly enabled in settings.
+The repository does not include personal IP addresses, tokens, qBittorrent credentials, or local configuration files. The external IP and free space shown in the sidebar come exclusively from your own qBittorrent API in live mode (no third-party IP services are contacted), and the optional version update check only contacts GitHub when explicitly enabled in settings.
 
 ---
 

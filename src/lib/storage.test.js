@@ -1,5 +1,7 @@
 import {
   APP_STATE_STORAGE_KEY,
+  normalizeExcludedCategories,
+  normalizeExcludedTagFilters,
   normalizeFilter,
   normalizeSort,
   normalizeTagFilters,
@@ -67,4 +69,13 @@ test('normalizeTagFilters accepts arrays, migrates the legacy single tag, and dr
   expect(normalizeTagFilters({ tagFilter: 'linux' })).toEqual(['linux']);
   expect(normalizeTagFilters({ tagFilters: ['x'], tagFilter: 'ignored' })).toEqual(['x']);
   expect(normalizeTagFilters({})).toEqual([]);
+});
+
+test('excluded filter normalization keeps unique non-empty strings', () => {
+  expect(normalizeExcludedCategories({ excludedCategories: ['linux', '', 3, 'linux', 'work'] }))
+    .toEqual(['linux', 'work']);
+  expect(normalizeExcludedTagFilters({ excludedTagFilters: ['archive', null, 'archive'] }))
+    .toEqual(['archive']);
+  expect(normalizeExcludedCategories({})).toEqual([]);
+  expect(normalizeExcludedTagFilters({ excludedTagFilters: 'linux' })).toEqual([]);
 });
