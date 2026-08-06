@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useState } from 'react';
 import './App.css';
 import AddTorrentModal from './components/AddTorrentModal';
+import DisconnectedPage from './components/DisconnectedPage';
 import LoginPage from './components/LoginPage';
 import RemoveTorrentModal from './components/RemoveTorrentModal';
 import SelectedPanel from './components/SelectedPanel';
@@ -12,7 +13,6 @@ import VersionModal from './components/VersionModal';
 import { createInitialSpeedHistory } from './components/SpeedHistoryGraph';
 import { COLUMNS, DEFAULT_SETTINGS, GITHUB_REPO } from './lib/constants';
 import { isNewerVersion } from './lib/format';
-import { SAMPLE_TORRENTS } from './lib/sampleData';
 import {
   APP_STATE_STORAGE_KEY,
   normalizeFilter,
@@ -111,8 +111,8 @@ function App() {
         if (!isMounted) {
           return;
         }
-        setTorrents(SAMPLE_TORRENTS);
-        setStatus('preview');
+        setTorrents([]);
+        setStatus('disconnected');
         setLastSync(new Date().toLocaleTimeString());
       }
     }
@@ -481,7 +481,6 @@ function App() {
       return;
     }
     if (status !== 'live') {
-      flashPreviewAction();
       return;
     }
     const to = direction === 'up' ? from - 1 : from + 1;
@@ -531,22 +530,12 @@ function App() {
     };
 
     if (status !== 'live') {
-      flashPreviewAction();
       return;
     }
 
     const body = new URLSearchParams({ hashes: selectedActionHashes.join('|') });
 
     postFirstAvailable(actionMap[action], body);
-  }
-
-  // Briefly flag preview-mode actions. The timeout only downgrades the flash
-  // itself, so a concurrent switch to another status (e.g. auth) sticks.
-  function flashPreviewAction() {
-    setStatus('preview action');
-    window.setTimeout(() => {
-      setStatus(current => (current === 'preview action' ? 'preview' : current));
-    }, 1200);
   }
 
   function logIn(username, password) {
@@ -605,7 +594,6 @@ function App() {
       return;
     }
     if (status !== 'live') {
-      flashPreviewAction();
       return;
     }
     postFirstAvailable(['/api/v2/torrents/reannounce'], new URLSearchParams({ hashes: hash }));
@@ -637,7 +625,6 @@ function App() {
     }
 
     if (status !== 'live') {
-      flashPreviewAction();
       setRemoveOpen(false);
       return;
     }
@@ -679,7 +666,7 @@ function App() {
     }
 
     if (status !== 'live') {
-      setAddNotice('Preview mode: torrent add is not sent to qBittorrent.');
+      setAddNotice('Not connected: torrent add was not sent to qBittorrent.');
       return;
     }
 
@@ -718,7 +705,7 @@ function App() {
 
   function saveSettings() {
     if (status !== 'live') {
-      setNotice('Preview mode: settings are shown but not written to qBittorrent.');
+      setNotice('Not connected: settings were not written to qBittorrent.');
       return;
     }
     fetch('/api/v2/app/setPreferences', {
@@ -739,7 +726,7 @@ function App() {
   function revertWebUI() {
     if (status !== 'live') {
       updateSetting('alternative_webui_enabled', false);
-      setNotice('Preview mode: disable Alternative WebUI in qBittorrent to revert.');
+      setNotice('Not connected: disable Alternative WebUI in qBittorrent to revert.');
       return;
     }
     fetch('/api/v2/app/setPreferences', {
@@ -821,6 +808,10 @@ function App() {
         onLogin={logIn}
       />
     );
+  }
+
+  if (status === 'disconnected') {
+    return <DisconnectedPage accent={settings.ui_accent_color || '#f07b24'} />;
   }
 
   return (
