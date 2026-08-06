@@ -1300,7 +1300,7 @@ dd {
   width: 112px;
 }
 
-.tracker-editor-section {
+.settings-section.tracker-editor-section {
   grid-template-columns: 1fr;
 }
 
