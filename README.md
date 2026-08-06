@@ -25,6 +25,7 @@ Dark, terminal-inspired qBittorrent WebUI built with React. The interface keeps 
 - Sortable torrent table (name, status, progress, down/up speed, ratio, added date) with a sticky header and toolbar.
 - Status filters for all, active, downloading, seeding, stopped, and stalled torrents, plus category filters, all with live counts.
 - Multi-select tag filters with AND matching: a torrent must carry every selected tag to show.
+- Double-click category or tag filters to exclude matching torrents; excluded filters are highlighted in red.
 - Search bar matching name, hash, category, tags, status, and save path.
 - Multi-select rows with Shift, Cmd, or Ctrl for resume, stop, recheck, and remove actions.
 - Remove confirmation modal with an optional `Delete downloaded data` checkbox (off by default).

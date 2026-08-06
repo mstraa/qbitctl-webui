@@ -34,6 +34,12 @@ function mockFetchWithLatestRelease(release) {
   );
 }
 
+function fireBrowserDoubleClick(element) {
+  fireEvent.click(element, { detail: 1 });
+  fireEvent.click(element, { detail: 2 });
+  fireEvent.doubleClick(element, { detail: 2 });
+}
+
 test('renders qbitctl shell', () => {
   const { getByText } = render(<App />);
   const headingElement = getByText(/qbitctl/i);
@@ -86,6 +92,59 @@ test('tag filters support multi-select with AND matching', async () => {
   // Toggling a selected tag off removes it from the filter set.
   fireEvent.click(within(tagNav).getByText('archive'));
   expect(queryByText('archlinux-2026.05.01-x86_64.iso')).toBeInTheDocument();
+});
+
+test('double-click excludes a tag and a single click returns it to neutral', async () => {
+  const { findByLabelText, findByText, queryByText } = render(<App />);
+  await findByText('archlinux-2026.05.01-x86_64.iso');
+  const tagNav = await findByLabelText('Tag filters');
+  const linuxButton = within(tagNav).getByText('linux').closest('button');
+
+  fireBrowserDoubleClick(linuxButton);
+  expect(linuxButton).toHaveClass('excluded');
+  expect(linuxButton).not.toHaveClass('active');
+  expect(queryByText('archlinux-2026.05.01-x86_64.iso')).toBeNull();
+  expect(queryByText('nightly.build.assets.pack')).toBeInTheDocument();
+  expect(JSON.parse(window.localStorage.getItem('qbitctl.appState.v1')).excludedTagFilters)
+    .toEqual(['linux']);
+
+  fireEvent.click(linuxButton);
+  expect(linuxButton).not.toHaveClass('excluded');
+  expect(linuxButton).not.toHaveClass('active');
+  expect(queryByText('archlinux-2026.05.01-x86_64.iso')).toBeInTheDocument();
+
+  fireEvent.click(linuxButton);
+  expect(linuxButton).toHaveClass('active');
+  expect(queryByText('archlinux-2026.05.01-x86_64.iso')).toBeInTheDocument();
+  expect(queryByText('nightly.build.assets.pack')).toBeNull();
+});
+
+test('category exclusions can be combined and return to neutral on click', async () => {
+  const { findByLabelText, findByText, queryByText } = render(<App />);
+  await findByText('archlinux-2026.05.01-x86_64.iso');
+  const categoryNav = await findByLabelText('Category filters');
+  const linuxButton = within(categoryNav).getByText('linux').closest('button');
+  const workButton = within(categoryNav).getByText('work').closest('button');
+
+  fireBrowserDoubleClick(linuxButton);
+  fireBrowserDoubleClick(workButton);
+  expect(linuxButton).toHaveClass('excluded');
+  expect(workButton).toHaveClass('excluded');
+  expect(queryByText('archlinux-2026.05.01-x86_64.iso')).toBeNull();
+  expect(queryByText('nightly.build.assets.pack')).toBeNull();
+  expect(JSON.parse(window.localStorage.getItem('qbitctl.appState.v1')).excludedCategories)
+    .toEqual(['linux', 'work']);
+
+  fireEvent.click(linuxButton);
+  expect(linuxButton).not.toHaveClass('excluded');
+  expect(linuxButton).not.toHaveClass('active');
+  expect(queryByText('archlinux-2026.05.01-x86_64.iso')).toBeInTheDocument();
+  expect(queryByText('nightly.build.assets.pack')).toBeNull();
+
+  fireEvent.click(linuxButton);
+  expect(linuxButton).toHaveClass('active');
+  expect(queryByText('archlinux-2026.05.01-x86_64.iso')).toBeInTheDocument();
+  expect(queryByText('public-domain-documentary-collection')).toBeNull();
 });
 
 test('activity graph labels the Y axis with only the peak value', async () => {

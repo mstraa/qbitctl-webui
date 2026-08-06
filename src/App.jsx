@@ -15,6 +15,8 @@ import { COLUMNS, DEFAULT_SETTINGS, GITHUB_REPO } from './lib/constants';
 import { isNewerVersion } from './lib/format';
 import {
   APP_STATE_STORAGE_KEY,
+  normalizeExcludedCategories,
+  normalizeExcludedTagFilters,
   normalizeFilter,
   normalizeSort,
   normalizeTagFilters,
@@ -41,7 +43,9 @@ function App() {
   const [lastClickedHash, setLastClickedHash] = useState('');
   const [activeFilter, setActiveFilter] = useState(() => normalizeFilter(readAppState().activeFilter));
   const [categoryFilter, setCategoryFilter] = useState(() => readAppState().categoryFilter || '');
+  const [excludedCategories, setExcludedCategories] = useState(() => normalizeExcludedCategories(readAppState()));
   const [tagFilters, setTagFilters] = useState(() => normalizeTagFilters(readAppState()));
+  const [excludedTagFilters, setExcludedTagFilters] = useState(() => normalizeExcludedTagFilters(readAppState()));
   const [query, setQuery] = useState(() => readAppState().query || '');
   const [sort, setSort] = useState(() => normalizeSort(readAppState().sort));
   const [status, setStatus] = useState('connecting');
@@ -145,13 +149,15 @@ function App() {
     writeAppState({
       activeFilter,
       categoryFilter,
+      excludedCategories,
+      excludedTagFilters,
       query,
       sort,
       // Drop the legacy single-tag key; JSON.stringify omits undefined values.
       tagFilter: undefined,
       tagFilters,
     });
-  }, [activeFilter, categoryFilter, query, sort, tagFilters]);
+  }, [activeFilter, categoryFilter, excludedCategories, excludedTagFilters, query, sort, tagFilters]);
 
   // The GitHub release check is opt-in: while the version button is disabled
   // (the default) no request is made at all. When enabled it runs at most
@@ -214,7 +220,9 @@ function App() {
       const nextState = readAppState();
       setActiveFilter(normalizeFilter(nextState.activeFilter));
       setCategoryFilter(nextState.categoryFilter || '');
+      setExcludedCategories(normalizeExcludedCategories(nextState));
       setTagFilters(normalizeTagFilters(nextState));
+      setExcludedTagFilters(normalizeExcludedTagFilters(nextState));
       setQuery(nextState.query || '');
       setSort(normalizeSort(nextState.sort));
       setSettings(current => ({
@@ -334,16 +342,16 @@ function App() {
     return torrents.filter(torrent => {
       const matchesFilter = matchesStateFilter(torrent, activeFilter);
       const matchesCategory = settings.ui_show_category_filters === false ||
-        !categoryFilter ||
-        torrent.category === categoryFilter;
+        ((!categoryFilter || torrent.category === categoryFilter) &&
+          !excludedCategories.includes(torrent.category));
       const torrentTags = parseTags(torrent.tags);
       const matchesTag = settings.ui_show_tag_filters === false ||
-        !tagFilters.length ||
-        tagFilters.every(tag => torrentTags.includes(tag));
+        ((!tagFilters.length || tagFilters.every(tag => torrentTags.includes(tag))) &&
+          !excludedTagFilters.some(tag => torrentTags.includes(tag)));
       const matchesQuery = searchableTorrentText(torrent).includes(query.trim().toLowerCase());
       return matchesFilter && matchesCategory && matchesTag && matchesQuery;
     });
-  }, [activeFilter, categoryFilter, query, settings.ui_show_category_filters, settings.ui_show_tag_filters, tagFilters, torrents]);
+  }, [activeFilter, categoryFilter, excludedCategories, excludedTagFilters, query, settings.ui_show_category_filters, settings.ui_show_tag_filters, tagFilters, torrents]);
 
   const visibleTorrents = useMemo(() => {
     const next = filteredTorrents.slice();
@@ -506,11 +514,43 @@ function App() {
   }
 
   function toggleTagFilter(tag) {
+    if (excludedTagFilters.includes(tag)) {
+      setExcludedTagFilters(current => current.filter(item => item !== tag));
+      return;
+    }
     setTagFilters(current =>
       current.includes(tag)
         ? current.filter(item => item !== tag)
         : current.concat(tag)
     );
+  }
+
+  function excludeTagFilter(tag) {
+    setTagFilters(current => current.filter(item => item !== tag));
+    setExcludedTagFilters(current => current.includes(tag) ? current : current.concat(tag));
+  }
+
+  function toggleCategoryFilter(category) {
+    if (excludedCategories.includes(category)) {
+      setExcludedCategories(current => current.filter(item => item !== category));
+      return;
+    }
+    setCategoryFilter(current => current === category ? '' : category);
+  }
+
+  function excludeCategoryFilter(category) {
+    setCategoryFilter(current => current === category ? '' : current);
+    setExcludedCategories(current => current.includes(category) ? current : current.concat(category));
+  }
+
+  function resetCategoryFilters() {
+    setCategoryFilter('');
+    setExcludedCategories([]);
+  }
+
+  function resetTagFilters() {
+    setTagFilters([]);
+    setExcludedTagFilters([]);
   }
 
   function handleAction(action) {
@@ -826,11 +866,16 @@ function App() {
         appVersion={appVersion}
         categories={categories}
         categoryFilter={categoryFilter}
+        excludedCategories={excludedCategories}
+        excludedTagFilters={excludedTagFilters}
         latestRelease={latestRelease}
-        onCategoryFilter={setCategoryFilter}
+        onExcludeCategory={excludeCategoryFilter}
+        onExcludeTag={excludeTagFilter}
         onFilter={setActiveFilter}
         onOpenVersion={() => setVersionModalOpen(true)}
-        onResetTagFilters={() => setTagFilters([])}
+        onResetCategoryFilters={resetCategoryFilters}
+        onResetTagFilters={resetTagFilters}
+        onToggleCategory={toggleCategoryFilter}
         onToggleTag={toggleTagFilter}
         sessionInfo={sessionInfo}
         settings={settings}

@@ -9,11 +9,16 @@ function Sidebar({
   appVersion,
   categories,
   categoryFilter,
+  excludedCategories,
+  excludedTagFilters,
   latestRelease,
-  onCategoryFilter,
+  onExcludeCategory,
+  onExcludeTag,
   onFilter,
   onOpenVersion,
+  onResetCategoryFilters,
   onResetTagFilters,
+  onToggleCategory,
   onToggleTag,
   sessionInfo,
   settings,
@@ -63,24 +68,21 @@ function Sidebar({
       {settings.ui_show_category_filters && categories.length > 0 && (
         <nav className="filter-list side-filter" aria-label="Category filters">
           <span className="sidebar-label">categories</span>
-          <button
-            className={!categoryFilter ? 'active' : ''}
-            onClick={() => onCategoryFilter('')}
-            type="button"
-          >
-            <span>All categories</span>
-            <strong>{torrents.length}</strong>
-          </button>
+          <FilterOption
+            count={torrents.length}
+            label="All categories"
+            onClick={onResetCategoryFilters}
+            state={!categoryFilter && !excludedCategories.length ? 'active' : 'neutral'}
+          />
           {categories.map(category => (
-            <button
-              className={category === categoryFilter ? 'active' : ''}
+            <FilterOption
+              count={torrents.filter(torrent => torrent.category === category).length}
               key={category}
-              onClick={() => onCategoryFilter(category)}
-              type="button"
-            >
-              <span>{category}</span>
-              <strong>{torrents.filter(torrent => torrent.category === category).length}</strong>
-            </button>
+              label={category}
+              onClick={() => onToggleCategory(category)}
+              onDoubleClick={() => onExcludeCategory(category)}
+              state={excludedCategories.includes(category) ? 'excluded' : category === categoryFilter ? 'active' : 'neutral'}
+            />
           ))}
         </nav>
       )}
@@ -88,24 +90,21 @@ function Sidebar({
       {settings.ui_show_tag_filters && tags.length > 0 && (
         <nav className="filter-list tags-filter" aria-label="Tag filters">
           <span className="sidebar-label">tags</span>
-          <button
-            className={!tagFilters.length ? 'active' : ''}
+          <FilterOption
+            count={torrents.length}
+            label="All tags"
             onClick={onResetTagFilters}
-            type="button"
-          >
-            <span>All tags</span>
-            <strong>{torrents.length}</strong>
-          </button>
+            state={!tagFilters.length && !excludedTagFilters.length ? 'active' : 'neutral'}
+          />
           {tags.map(tag => (
-            <button
-              className={tagFilters.includes(tag) ? 'active' : ''}
+            <FilterOption
+              count={torrents.filter(torrent => parseTags(torrent.tags).includes(tag)).length}
               key={tag}
+              label={tag}
               onClick={() => onToggleTag(tag)}
-              type="button"
-            >
-              <span>{tag}</span>
-              <strong>{torrents.filter(torrent => parseTags(torrent.tags).includes(tag)).length}</strong>
-            </button>
+              onDoubleClick={() => onExcludeTag(tag)}
+              state={excludedTagFilters.includes(tag) ? 'excluded' : tagFilters.includes(tag) ? 'active' : 'neutral'}
+            />
           ))}
         </nav>
       )}
@@ -134,6 +133,31 @@ function Sidebar({
         </div>
       </div>
     </aside>
+  );
+}
+
+function FilterOption({ count, label, onClick, onDoubleClick, state }) {
+  return (
+    <button
+      aria-label={`${label}, ${state}`}
+      className={state === 'neutral' ? '' : state}
+      onClick={event => {
+        if (event.detail > 1 && onDoubleClick) {
+          onDoubleClick();
+          return;
+        }
+        onClick();
+      }}
+      onDoubleClick={event => {
+        event.preventDefault();
+        onDoubleClick?.();
+      }}
+      title={onDoubleClick ? 'Double-click to exclude' : undefined}
+      type="button"
+    >
+      <span>{label}</span>
+      <strong>{count}</strong>
+    </button>
   );
 }
 
