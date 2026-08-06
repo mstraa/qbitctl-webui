@@ -679,6 +679,31 @@ dd {
   line-height: 1;
 }
 
+.toolbar .edit-torrents-button {
+  width: 34px;
+  padding: 0;
+  display: grid;
+  place-items: center;
+}
+
+.edit-torrents-button svg {
+  width: 18px;
+  height: 18px;
+  fill: none;
+  stroke: currentColor;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+  stroke-width: 1.6;
+}
+
+.toolbar button:disabled {
+  border-color: var(--line);
+  background: var(--panel);
+  color: var(--faint);
+  cursor: not-allowed;
+  opacity: 0.65;
+}
+
 .command-row {
   position: sticky;
   top: 73px;
@@ -1210,11 +1235,239 @@ dd {
   align-items: center;
 }
 
+.torrent-editor-overlay {
+  place-items: center;
+}
+
 .tag-modal {
   width: min(560px, calc(100vw - 28px));
   border: 1px solid var(--line-strong);
   background: #0d0d0d;
   box-shadow: 0 24px 80px rgba(0, 0, 0, 0.55);
+}
+
+.torrent-editor-modal {
+  width: min(900px, calc(100vw - 28px));
+  max-height: min(900px, calc(100vh - 28px));
+  display: grid;
+  grid-template-rows: auto minmax(0, 1fr) auto;
+  border: 1px solid var(--line-strong);
+  background:
+    linear-gradient(rgba(255, 255, 255, 0.022) 1px, transparent 1px),
+    linear-gradient(90deg, rgba(255, 255, 255, 0.016) 1px, transparent 1px),
+    #0d0d0d;
+  background-size: 28px 28px;
+  box-shadow: 0 24px 80px rgba(0, 0, 0, 0.65);
+}
+
+.torrent-editor-body {
+  align-content: start;
+}
+
+.editor-summary {
+  margin: 0;
+  padding: 11px 13px;
+  border: 1px solid var(--orange-dim);
+  background: rgba(23, 17, 13, 0.9);
+  color: var(--orange);
+  font-family: "SFMono-Regular", Consolas, "Liberation Mono", monospace;
+  font-size: 12px;
+}
+
+.editor-wide-group {
+  grid-column: 1 / -1;
+  display: grid;
+  gap: 10px;
+}
+
+.editor-warning {
+  color: var(--amber);
+}
+
+.share-limit-row {
+  align-items: start;
+}
+
+.share-limit-controls {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 8px;
+}
+
+.setting-row .share-limit-controls select,
+.setting-row .share-limit-controls input {
+  width: 112px;
+}
+
+.tracker-editor-section {
+  grid-template-columns: 1fr;
+}
+
+.editor-section-heading {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.editor-section-heading h3,
+.editor-section-heading p {
+  margin: 0;
+}
+
+.editor-section-heading p {
+  margin-top: 5px;
+}
+
+.editor-section-heading > strong {
+  color: var(--orange);
+  font-family: "SFMono-Regular", Consolas, "Liberation Mono", monospace;
+  font-size: 11px;
+  font-weight: 500;
+  text-transform: uppercase;
+}
+
+.tracker-add-row {
+  grid-template-columns: 1fr auto;
+  align-items: end;
+}
+
+.tracker-add-row > span {
+  grid-column: 1 / -1;
+}
+
+.tracker-add-row textarea {
+  min-height: 72px;
+}
+
+.tracker-add-row button,
+.tracker-editor-actions button,
+.tracker-edit-form button {
+  min-height: 32px;
+  padding: 0 11px;
+  border: 1px solid var(--line);
+  background: #090909;
+  color: var(--muted);
+  cursor: pointer;
+}
+
+.tracker-add-row button:hover:not(:disabled),
+.tracker-editor-actions button:hover:not(:disabled),
+.tracker-edit-form button:hover:not(:disabled) {
+  border-color: var(--orange-dim);
+  color: var(--orange);
+}
+
+.tracker-add-row button:disabled,
+.tracker-editor-actions button:disabled,
+.tracker-edit-form button:disabled,
+.settings-footer button:disabled {
+  cursor: not-allowed;
+  opacity: 0.55;
+}
+
+.tracker-editor-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  border: 1px solid var(--line);
+  background: #0b0b0b;
+}
+
+.tracker-editor-list > li {
+  min-width: 0;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 10px;
+  border-bottom: 1px solid var(--line);
+}
+
+.tracker-editor-list > li:last-child {
+  border-bottom: 0;
+}
+
+.tracker-editor-list > li.tracker-editor-empty {
+  color: var(--muted);
+  font-size: 12px;
+}
+
+.tracker-editor-url {
+  min-width: 0;
+  display: grid;
+  gap: 4px;
+}
+
+.tracker-editor-url code,
+.tracker-edit-form > span {
+  overflow-wrap: anywhere;
+  color: var(--text);
+  font-size: 12px;
+}
+
+.tracker-editor-url small {
+  color: var(--muted);
+  font-size: 10px;
+  text-transform: uppercase;
+}
+
+.tracker-editor-actions {
+  flex: 0 0 auto;
+  display: flex;
+  gap: 6px;
+}
+
+.tracker-editor-actions .confirm-inline {
+  border-color: rgba(255, 107, 95, 0.55);
+  background: rgba(255, 107, 95, 0.08);
+  color: var(--red);
+}
+
+.tracker-edit-form {
+  width: 100%;
+  display: grid;
+  grid-template-columns: minmax(120px, 0.8fr) minmax(180px, 1.2fr) auto;
+  align-items: center;
+  gap: 10px;
+}
+
+.tracker-edit-form input {
+  width: 100%;
+  min-height: 32px;
+  border: 1px solid var(--line-strong);
+  outline: none;
+  background: #090909;
+  color: var(--text);
+  padding: 0 9px;
+}
+
+.tracker-edit-form input:focus {
+  border-color: var(--orange);
+  box-shadow: 0 0 0 2px rgba(240, 123, 36, 0.14);
+}
+
+.tracker-edit-form > div {
+  display: flex;
+  gap: 6px;
+}
+
+.tracker-edit-form .primary-inline {
+  border-color: var(--orange-dim);
+  color: var(--orange);
+}
+
+.editor-notice.error {
+  color: var(--red);
+}
+
+.editor-notice.warning {
+  color: var(--amber);
+}
+
+.editor-notice.success {
+  color: var(--green);
 }
 
 .add-modal {
@@ -1721,6 +1974,29 @@ dd {
 
   .settings-panel {
     width: 100vw;
+  }
+
+  .torrent-editor-modal {
+    width: 100vw;
+    max-width: none;
+    max-height: 100vh;
+    height: 100vh;
+    border-width: 0;
+  }
+
+  .tracker-add-row,
+  .tracker-edit-form {
+    grid-template-columns: 1fr;
+  }
+
+  .tracker-editor-list > li {
+    align-items: stretch;
+    flex-direction: column;
+  }
+
+  .tracker-editor-actions,
+  .tracker-edit-form > div {
+    justify-content: flex-end;
   }
 
   .settings-section {
