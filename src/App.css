@@ -389,6 +389,21 @@ button {
   color: var(--text);
 }
 
+.filter-list button.excluded {
+  border-color: rgba(255, 107, 95, 0.55);
+  background: rgba(255, 107, 95, 0.09);
+  color: var(--red);
+}
+
+.filter-list button.excluded strong {
+  color: var(--red);
+}
+
+.filter-list button.excluded:hover {
+  border-color: var(--red);
+  background: rgba(255, 107, 95, 0.14);
+}
+
 .filter-list strong {
   color: var(--orange);
   font-family: "SFMono-Regular", Consolas, "Liberation Mono", monospace;
