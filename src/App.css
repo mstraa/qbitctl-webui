@@ -49,6 +49,88 @@ button {
   grid-template-columns: 260px minmax(0, 1fr);
 }
 
+.disconnected-shell {
+  min-height: 100vh;
+  display: grid;
+  place-items: center;
+  padding: 24px;
+  background:
+    radial-gradient(circle at center, rgba(240, 123, 36, 0.08), transparent 34%),
+    linear-gradient(rgba(255, 255, 255, 0.025) 1px, transparent 1px),
+    linear-gradient(90deg, rgba(255, 255, 255, 0.018) 1px, transparent 1px),
+    var(--bg);
+  background-size: auto, 28px 28px, 28px 28px, auto;
+  color: var(--text);
+}
+
+.disconnected-card {
+  width: min(100%, 460px);
+  padding: 42px 34px;
+  border: 1px solid var(--line);
+  background: rgba(16, 16, 16, 0.94);
+  box-shadow: 0 18px 50px var(--shadow);
+  text-align: center;
+}
+
+.disconnected-card h1 {
+  margin: 12px 0 10px;
+  color: var(--text);
+  font-size: clamp(30px, 6vw, 44px);
+  letter-spacing: -0.04em;
+}
+
+.disconnected-card p {
+  max-width: 340px;
+  margin: 0 auto;
+  color: var(--muted);
+  line-height: 1.6;
+}
+
+.disconnected-signal {
+  height: 34px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 7px;
+  margin-bottom: 20px;
+}
+
+.disconnected-signal span {
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  background: var(--orange);
+  box-shadow: 0 0 14px rgba(240, 123, 36, 0.45);
+  animation: disconnected-pulse 1.2s ease-in-out infinite;
+}
+
+.disconnected-signal span:nth-child(2) {
+  animation-delay: 0.16s;
+}
+
+.disconnected-signal span:nth-child(3) {
+  animation-delay: 0.32s;
+}
+
+@keyframes disconnected-pulse {
+  0%,
+  100% {
+    opacity: 0.25;
+    transform: translateY(0) scale(0.8);
+  }
+
+  50% {
+    opacity: 1;
+    transform: translateY(-5px) scale(1);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .disconnected-signal span {
+    animation: none;
+  }
+}
+
 .sidebar,
 .details-pane {
   background: rgba(16, 16, 16, 0.96);

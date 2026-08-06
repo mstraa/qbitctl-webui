@@ -1,12 +1,24 @@
 import { fireEvent, render, within } from '@testing-library/react';
 import App from './App';
+import { SAMPLE_TORRENTS } from './lib/sampleData';
+
+function mockDefaultApi(url) {
+  if (String(url).includes('/api/v2/torrents/info')) {
+    return Promise.resolve({
+      ok: true,
+      status: 200,
+      json: () => Promise.resolve(SAMPLE_TORRENTS),
+    });
+  }
+  return Promise.reject(new Error('offline'));
+}
 
 beforeEach(() => {
   window.localStorage.clear();
   vi.stubEnv('VITE_APP_VERSION', '1.2.0');
-  // Default: no network at all -> the app falls back to preview mode and the
-  // GitHub release check stays unresolved. Tests override this when needed.
-  vi.spyOn(global, 'fetch').mockImplementation(() => Promise.reject(new Error('offline')));
+  // Most component tests use a live API response backed by stable fixtures.
+  // Tests for auth, queue APIs, and disconnection override this when needed.
+  vi.spyOn(global, 'fetch').mockImplementation(mockDefaultApi);
 });
 
 afterEach(() => {
@@ -18,7 +30,7 @@ function mockFetchWithLatestRelease(release) {
   global.fetch.mockImplementation(url =>
     String(url).includes('api.github.com')
       ? Promise.resolve({ ok: true, json: () => Promise.resolve(release) })
-      : Promise.reject(new Error('offline'))
+      : mockDefaultApi(url)
   );
 }
 
@@ -81,7 +93,7 @@ test('activity graph labels the Y axis with only the peak value', async () => {
   await findByText('archlinux-2026.05.01-x86_64.iso');
   const graph = await findByLabelText('Last hour speed graph');
 
-  // Preview totals peak at 11.8 MB/s down -> only the max label is shown.
+  // Fixture totals peak at 11.8 MB/s down -> only the max label is shown.
   expect(within(graph).getByText('11M')).toBeInTheDocument();
   expect(within(graph).queryByText('5.6M')).toBeNull();
   expect(within(graph).queryByText('0')).toBeNull();
@@ -139,11 +151,14 @@ function githubWasCalled() {
   return global.fetch.mock.calls.some(([url]) => String(url).includes('api.github.com'));
 }
 
-test('preview mode shows an IP placeholder and never calls third-party IP services', async () => {
-  const { findByText, getByText } = render(<App />);
-  await findByText('archlinux-2026.05.01-x86_64.iso');
+test('API failure shows the full disconnected page instead of preview torrents', async () => {
+  global.fetch.mockImplementation(() => Promise.reject(new Error('offline')));
+  const { container, findByText, queryByText } = render(<App />);
 
-  expect(getByText('xxx.xxx.xxx.xxx')).toBeInTheDocument();
+  expect(await findByText('Disconnected')).toBeInTheDocument();
+  expect(container.querySelector('.disconnected-shell')).toBeInTheDocument();
+  expect(container.querySelectorAll('.disconnected-signal span')).toHaveLength(3);
+  expect(queryByText('archlinux-2026.05.01-x86_64.iso')).toBeNull();
   expect(global.fetch.mock.calls.some(([url]) => String(url).includes('ipify'))).toBe(false);
 });
 
@@ -167,8 +182,8 @@ test('version button opens the version modal when opted in', async () => {
   const { findByText, getByText, getByTitle, queryByText } = render(<App />);
   await findByText('archlinux-2026.05.01-x86_64.iso');
 
-  // The old "live/preview" connection block is gone.
-  expect(queryByText('preview')).toBeNull();
+  // The old connection-state block is gone.
+  expect(queryByText('live')).toBeNull();
 
   const button = getByTitle('Version details');
   expect(button).toHaveTextContent('v1.2.0');
@@ -309,7 +324,7 @@ test('queue column shows positions and a dash for unqueued torrents', async () =
   expect(within(seedRow).queryByLabelText('Move down in queue')).toBeNull();
 });
 
-test('queue chevrons do not select the row and stay local in preview mode', async () => {
+test('queue chevrons do not select the row', async () => {
   const { container, findByText, getByText, queryByText } = render(<App />);
   await findByText('nightly.build.assets.pack');
 
@@ -318,7 +333,6 @@ test('queue chevrons do not select the row and stay local in preview mode', asyn
 
   expect(container.querySelector('.torrent-row.selected')).toBeNull();
   expect(queryByText('ETA')).toBeNull();
-  expect(global.fetch.mock.calls.some(([url]) => String(url).includes('Prio'))).toBe(false);
 });
 
 test('sorting by # orders the queue and sinks unqueued torrents', async () => {
