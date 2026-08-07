@@ -7,6 +7,7 @@ import {
   normalizeTagFilters,
   pickUiSettings,
   readAppState,
+  readStoredAutoTagRules,
   readStoredUiSettings,
   writeAppState,
 } from './storage';
@@ -47,6 +48,16 @@ test('readStoredUiSettings reads the settings slice of stored state', () => {
   expect(readStoredUiSettings()).toEqual({});
   writeAppState({ settings: { ui_accent_color: '#abc', dl_limit: '9' } });
   expect(readStoredUiSettings()).toEqual({ ui_accent_color: '#abc' });
+});
+
+test('readStoredAutoTagRules normalizes locally stored rules', () => {
+  expect(readStoredAutoTagRules()).toEqual([]);
+  writeAppState({
+    autoTagRules: [{ id: 'one', field: 'tracker_url', operator: 'contains', value: 'tracker.com', tag: 'Tracker' }],
+  });
+  expect(readStoredAutoTagRules()).toEqual([
+    { id: 'one', field: 'tracker_url', operator: 'contains', value: 'tracker.com', tag: 'Tracker' },
+  ]);
 });
 
 test('normalizeSort falls back to name/asc for unknown columns', () => {

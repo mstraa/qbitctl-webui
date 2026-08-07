@@ -1692,6 +1692,118 @@ dd {
   grid-column: 1 / -1;
 }
 
+.auto-tag-section {
+  grid-template-columns: 1fr;
+}
+
+.auto-tag-list {
+  display: grid;
+  gap: 8px;
+}
+
+.auto-tag-empty {
+  margin: 0;
+  padding: 14px;
+  border: 1px dashed var(--line-strong);
+  text-align: center;
+}
+
+.auto-tag-rule {
+  min-width: 0;
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr);
+  align-items: start;
+  gap: 10px 12px;
+  padding: 10px;
+  border: 1px solid var(--line);
+  background: var(--panel-2);
+}
+
+.auto-tag-condition,
+.auto-tag-result {
+  min-width: 0;
+  display: grid;
+  align-items: end;
+  gap: 8px;
+}
+
+.auto-tag-condition {
+  grid-template-columns: minmax(130px, 0.7fr) minmax(130px, 0.7fr) minmax(220px, 2fr);
+}
+
+.auto-tag-result {
+  grid-column: 2;
+  grid-template-columns: minmax(220px, 1fr) auto;
+}
+
+.auto-tag-condition label,
+.auto-tag-result label {
+  min-width: 0;
+  display: grid;
+  gap: 5px;
+}
+
+.auto-tag-condition label > span,
+.auto-tag-result label > span,
+.auto-tag-rule-number {
+  color: var(--faint);
+  font-family: "SFMono-Regular", Consolas, "Liberation Mono", monospace;
+  font-size: 10px;
+  text-transform: uppercase;
+}
+
+.auto-tag-rule input,
+.auto-tag-rule select {
+  width: 100%;
+  min-width: 0;
+  min-height: 32px;
+  border: 1px solid var(--line-strong);
+  outline: none;
+  background: #090909;
+  color: var(--text);
+  padding: 0 8px;
+}
+
+.auto-tag-rule input:focus,
+.auto-tag-rule select:focus {
+  border-color: var(--orange);
+  box-shadow: 0 0 0 2px rgba(240, 123, 36, 0.14);
+}
+
+.auto-tag-rule-number {
+  align-self: center;
+}
+
+.auto-tag-rule-number {
+  grid-row: 1 / 3;
+  padding-top: 27px;
+}
+
+.auto-tag-add,
+.auto-tag-remove {
+  min-height: 32px;
+  border: 1px solid var(--line-strong);
+  background: #090909;
+  color: var(--muted);
+  cursor: pointer;
+}
+
+.auto-tag-add {
+  justify-self: start;
+  padding: 0 12px;
+  color: var(--orange);
+}
+
+.auto-tag-remove {
+  padding: 0 8px;
+  color: var(--red);
+}
+
+.auto-tag-add:hover,
+.auto-tag-remove:hover {
+  border-color: currentColor;
+}
+
 .setting-row {
   min-width: 0;
   min-height: 48px;
@@ -2001,6 +2113,26 @@ dd {
 
   .settings-section {
     grid-template-columns: 1fr;
+  }
+
+  .auto-tag-rule {
+    grid-template-columns: auto minmax(0, 1fr);
+  }
+
+  .auto-tag-condition {
+    grid-template-columns: 1fr 1fr;
+  }
+
+  .auto-tag-pattern {
+    grid-column: 1 / -1;
+  }
+
+  .auto-tag-result {
+    grid-template-columns: minmax(0, 1fr) auto;
+  }
+
+  .auto-tag-rule-number {
+    padding-top: 27px;
   }
 
   .settings-footer {

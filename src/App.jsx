@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import './App.css';
 import AddTorrentModal from './components/AddTorrentModal';
 import DisconnectedPage from './components/DisconnectedPage';
@@ -14,6 +14,8 @@ import VersionModal from './components/VersionModal';
 import { createInitialSpeedHistory } from './components/SpeedHistoryGraph';
 import { COLUMNS, DEFAULT_SETTINGS, GITHUB_REPO } from './lib/constants';
 import { isNewerVersion } from './lib/format';
+import { matchingAutoTags, trackerUrlsFrom } from './lib/autoTags';
+import { SAMPLE_TORRENTS } from './lib/sampleData';
 import {
   APP_STATE_STORAGE_KEY,
   normalizeExcludedCategories,
@@ -23,6 +25,7 @@ import {
   normalizeTagFilters,
   pickUiSettings,
   readAppState,
+  readStoredAutoTagRules,
   readStoredUiSettings,
   writeAppState,
 } from './lib/storage';
@@ -41,6 +44,20 @@ import {
   parseTags,
   searchableTorrentText,
 } from './lib/torrents';
+
+async function postForm(url, values) {
+  const response = await fetch(url, {
+    method: 'POST',
+    credentials: 'same-origin',
+    headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+    body: values instanceof URLSearchParams ? values : new URLSearchParams(values),
+  });
+  if (!response.ok) {
+    const detail = (await response.text().catch(() => '')).trim();
+    throw new Error(detail || `qBittorrent returned HTTP ${response.status}`);
+  }
+  return response;
+}
 
 function App() {
   const [speedHistory, setSpeedHistory] = useState(createInitialSpeedHistory());
@@ -76,6 +93,8 @@ function App() {
     ...DEFAULT_SETTINGS,
     ...readStoredUiSettings(),
   }));
+  const [autoTagRules, setAutoTagRules] = useState(readStoredAutoTagRules);
+  const observedAutoTagHashes = useRef(null);
   const [notice, setNotice] = useState('');
   const [selectedMeta, setSelectedMeta] = useState({});
   const [tagEditorOpen, setTagEditorOpen] = useState(false);
@@ -129,8 +148,13 @@ function App() {
         if (!isMounted) {
           return;
         }
-        setTorrents([]);
-        setStatus('disconnected');
+        if (import.meta.env.VITE_PREVIEW_MODE === 'true') {
+          setTorrents(SAMPLE_TORRENTS);
+          setStatus('preview');
+        } else {
+          setTorrents([]);
+          setStatus('disconnected');
+        }
         setLastSync(new Date().toLocaleTimeString());
       }
     }
@@ -245,6 +269,10 @@ function App() {
   }, [settings]);
 
   useEffect(() => {
+    writeAppState({ autoTagRules });
+  }, [autoTagRules]);
+
+  useEffect(() => {
     function syncStoredState(event) {
       if (event.key !== APP_STATE_STORAGE_KEY) {
         return;
@@ -257,6 +285,7 @@ function App() {
       setExcludedTagFilters(normalizeExcludedTagFilters(nextState));
       setQuery(nextState.query || '');
       setSort(normalizeSort(nextState.sort));
+      setAutoTagRules(readStoredAutoTagRules());
       setSettings(current => ({
         ...current,
         ...pickUiSettings(nextState.settings || {}),
@@ -266,6 +295,77 @@ function App() {
     window.addEventListener('storage', syncStoredState);
     return () => window.removeEventListener('storage', syncStoredState);
   }, []);
+
+  useEffect(() => {
+    if (status !== 'live') {
+      observedAutoTagHashes.current = null;
+      return;
+    }
+
+    // Existing torrents form the baseline. Rules only run for hashes that
+    // appear later, including torrents added by another qBittorrent client.
+    if (observedAutoTagHashes.current === null) {
+      observedAutoTagHashes.current = new Set(torrents.map(torrent => torrent.hash));
+      return;
+    }
+
+    const newTorrents = torrents.filter(torrent => !observedAutoTagHashes.current.has(torrent.hash));
+    newTorrents.forEach(torrent => observedAutoTagHashes.current.add(torrent.hash));
+    if (!newTorrents.length || !autoTagRules.length) {
+      return;
+    }
+
+    let cancelled = false;
+    const needsTrackers = autoTagRules.some(rule => rule.field === 'tracker_url' && rule.value.trim() && rule.tag.trim());
+
+    newTorrents.forEach(async torrent => {
+      let trackerUrls = trackerUrlsFrom(torrent);
+      if (needsTrackers) {
+        try {
+          const response = await fetch(`/api/v2/torrents/trackers?hash=${encodeURIComponent(torrent.hash)}`, {
+            credentials: 'same-origin',
+          });
+          if (response.ok) {
+            trackerUrls = trackerUrlsFrom(torrent, await response.json());
+          }
+        } catch {
+          // The current tracker from torrents/info can still satisfy the rule.
+        }
+      }
+
+      const existingTags = parseTags(torrent.tags);
+      const existingKeys = new Set(existingTags.map(tag => tag.toLowerCase()));
+      const tagsToAdd = matchingAutoTags(torrent, autoTagRules, trackerUrls)
+        .filter(tag => !existingKeys.has(tag.toLowerCase()));
+      if (!tagsToAdd.length) {
+        return;
+      }
+
+      try {
+        await postForm('/api/v2/torrents/createTags', { tags: tagsToAdd.join(',') });
+      } catch {
+        // Duplicate tags are expected; assigning them below is authoritative.
+      }
+
+      try {
+        await postForm('/api/v2/torrents/addTags', {
+          hashes: torrent.hash,
+          tags: tagsToAdd.join(','),
+        });
+        if (!cancelled) {
+          setTorrents(current => current.map(item => item.hash === torrent.hash
+            ? { ...item, tags: existingTags.concat(tagsToAdd).join(', ') }
+            : item));
+        }
+      } catch {
+        // A later qBittorrent poll remains the source of truth after failure.
+      }
+    });
+
+    return () => {
+      cancelled = true;
+    };
+  }, [autoTagRules, status, torrents]);
 
   useEffect(() => {
     let cancelled = false;
@@ -700,20 +800,6 @@ function App() {
     });
   }
 
-  async function postForm(url, values) {
-    const response = await fetch(url, {
-      method: 'POST',
-      credentials: 'same-origin',
-      headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
-      body: values instanceof URLSearchParams ? values : new URLSearchParams(values),
-    });
-    if (!response.ok) {
-      const detail = (await response.text().catch(() => '')).trim();
-      throw new Error(detail || `qBittorrent returned HTTP ${response.status}`);
-    }
-    return response;
-  }
-
   function confirmRemove() {
     if (!selectedActionHashes.length) {
       setRemoveOpen(false);
@@ -814,7 +900,7 @@ function App() {
         if (!response.ok) {
           throw new Error('settings save failed');
         }
-        setNotice('Settings saved to qBittorrent.');
+        setNotice('qBittorrent settings and local auto-tag rules saved.');
       })
       .catch(() => setNotice('qBittorrent rejected the settings update.'));
   }
@@ -1278,7 +1364,9 @@ function App() {
 
       {settingsOpen && (
         <SettingsPanel
+          autoTagRules={autoTagRules}
           notice={notice}
+          onAutoTagRulesUpdate={setAutoTagRules}
           onClose={() => setSettingsOpen(false)}
           onLogout={logOut}
           onRevert={revertWebUI}

@@ -1,4 +1,5 @@
 import { COLUMNS, FILTERS } from './constants';
+import { normalizeAutoTagRules } from './autoTags';
 
 export const APP_STATE_STORAGE_KEY = 'qbitctl.appState.v1';
 
@@ -81,6 +82,10 @@ export function normalizeExcludedCategories(state) {
 
 export function normalizeExcludedTagFilters(state) {
   return normalizeStringArray(state.excludedTagFilters);
+}
+
+export function readStoredAutoTagRules() {
+  return normalizeAutoTagRules(readAppState().autoTagRules);
 }
 
 function normalizeStringArray(candidate) {
