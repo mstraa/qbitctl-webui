@@ -32,6 +32,7 @@ Dark, terminal-inspired qBittorrent WebUI built with React. The interface keeps 
 - Batch tracker management with add, replace, and confirmed removal across the current selection, including per-URL torrent counts and partial-failure feedback.
 - Remove confirmation modal with an optional `Delete downloaded data` checkbox (off by default).
 - Add modal accepting multiple `.torrent` files and magnet/URL paste, with tags applied at add time and an `Add stopped` option for import workflows (add stopped, recheck, then resume).
+- Auto-tag rules for newly added torrents, matching names or tracker URLs with literal `contains` or SQL-style `like` patterns.
 
 ### Torrent details
 
@@ -98,6 +99,12 @@ This starts the Vite dev server on `http://localhost:3000`. Without a reachable 
 
 ```bash
 QBIT_URL=http://localhost:8080 yarn start
+```
+
+To inspect the interface with built-in sample torrents and no qBittorrent backend, enable preview mode:
+
+```bash
+VITE_PREVIEW_MODE=true yarn start
 ```
 
 Run the tests with:

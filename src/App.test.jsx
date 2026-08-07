@@ -1,4 +1,4 @@
-import { fireEvent, render, waitFor, within } from '@testing-library/react';
+import { act, fireEvent, render, waitFor, within } from '@testing-library/react';
 import App from './App';
 import { SAMPLE_TORRENTS } from './lib/sampleData';
 
@@ -44,6 +44,78 @@ test('renders qbitctl shell', () => {
   const { getByText } = render(<App />);
   const headingElement = getByText(/qbitctl/i);
   expect(headingElement).toBeInTheDocument();
+});
+
+test('settings can create and persist an auto-tag rule', async () => {
+  const { findByText, getByLabelText, getByText } = render(<App />);
+  await findByText('archlinux-2026.05.01-x86_64.iso');
+  fireEvent.click(getByLabelText('Settings'));
+  fireEvent.click(getByText('+ Add auto-tag rule'));
+
+  fireEvent.change(getByLabelText('Auto-tag rule 1 field'), { target: { value: 'tracker_url' } });
+  fireEvent.change(getByLabelText('Auto-tag rule 1 string'), { target: { value: 'tracker.com' } });
+  fireEvent.change(getByLabelText('Auto-tag rule 1 tag'), { target: { value: 'Tracker' } });
+
+  await waitFor(() => {
+    const stored = JSON.parse(window.localStorage.getItem('qbitctl.appState.v1'));
+    expect(stored.autoTagRules).toMatchObject([
+      { field: 'tracker_url', operator: 'contains', value: 'tracker.com', tag: 'Tracker' },
+    ]);
+  });
+});
+
+test('newly observed torrents receive matching name and tracker auto-tags', async () => {
+  window.localStorage.setItem('qbitctl.appState.v1', JSON.stringify({
+    autoTagRules: [
+      { id: 'tracker', field: 'tracker_url', operator: 'contains', value: 'tracker.com', tag: 'Tracker' },
+      { id: 'show', field: 'name', operator: 'like', value: '%S%E%', tag: 'tvshow' },
+    ],
+  }));
+  const addedTorrent = {
+    ...SAMPLE_TORRENTS[0],
+    hash: 'new-show',
+    name: 'Malcom.s11e09.hevc.mkv',
+    tags: '',
+    trackers: undefined,
+  };
+  let infoRequests = 0;
+  let torrentPoll;
+  vi.spyOn(window, 'setInterval').mockImplementation(callback => {
+    if (!torrentPoll) torrentPoll = callback;
+    return 1;
+  });
+  global.fetch.mockImplementation((url, options = {}) => {
+    const value = String(url);
+    if (value.includes('/api/v2/torrents/info')) {
+      infoRequests += 1;
+      return Promise.resolve({
+        ok: true,
+        status: 200,
+        json: () => Promise.resolve(infoRequests === 1 ? SAMPLE_TORRENTS : SAMPLE_TORRENTS.concat(addedTorrent)),
+      });
+    }
+    if (value.includes('/api/v2/torrents/trackers') && value.includes('new-show')) {
+      return Promise.resolve({
+        ok: true,
+        status: 200,
+        json: () => Promise.resolve([{ url: 'https://tracker.com/announce/cdjhfdkjshdjksfhd' }]),
+      });
+    }
+    if (options.method === 'POST' && (value.includes('/createTags') || value.includes('/addTags'))) {
+      return Promise.resolve({ ok: true, status: 200, text: () => Promise.resolve('') });
+    }
+    return Promise.reject(new Error('offline'));
+  });
+
+  const { findByText } = render(<App />);
+  await findByText('archlinux-2026.05.01-x86_64.iso');
+  await act(async () => torrentPoll());
+
+  await waitFor(() => {
+    const call = global.fetch.mock.calls.find(([url]) => String(url).includes('/api/v2/torrents/addTags'));
+    expect(call).toBeTruthy();
+    expect(String(call[1].body)).toBe('hashes=new-show&tags=Tracker%2Ctvshow');
+  });
 });
 
 test('sidebar offers Stopped but no Paused filter', async () => {
@@ -370,6 +442,15 @@ test('API failure shows the full disconnected page instead of preview torrents',
   expect(container.querySelectorAll('.disconnected-signal span')).toHaveLength(3);
   expect(queryByText('archlinux-2026.05.01-x86_64.iso')).toBeNull();
   expect(global.fetch.mock.calls.some(([url]) => String(url).includes('ipify'))).toBe(false);
+});
+
+test('explicit preview mode shows sample torrents when the API is unavailable', async () => {
+  vi.stubEnv('VITE_PREVIEW_MODE', 'true');
+  global.fetch.mockImplementation(() => Promise.reject(new Error('offline')));
+  const { findByText, queryByText } = render(<App />);
+
+  expect(await findByText('archlinux-2026.05.01-x86_64.iso')).toBeInTheDocument();
+  expect(queryByText('Disconnected')).toBeNull();
 });
 
 test('version check is opt-in: no button and no GitHub call by default', async () => {

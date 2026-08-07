@@ -1,4 +1,5 @@
 import { useState } from 'react';
+import { createAutoTagRule } from '../lib/autoTags';
 import { overlayClose } from './common';
 
 function WebUISection({ onRevert, onUpdate, settings }) {
@@ -113,6 +114,62 @@ function DownloadsSection({ onUpdate, settings }) {
   );
 }
 
+function AutoTagSection({ onUpdate, rules }) {
+  function updateRule(id, key, value) {
+    onUpdate(rules.map(rule => rule.id === id ? { ...rule, [key]: value } : rule));
+  }
+
+  function addRule() {
+    onUpdate(rules.concat(createAutoTagRule()));
+  }
+
+  return (
+    <section className="settings-section auto-tag-section">
+      <div>
+        <h3>Auto-tag</h3>
+        <p>Assign tags once, when a newly added torrent appears. Matching is case-insensitive.</p>
+      </div>
+      <div className="auto-tag-list">
+        {!rules.length && <p className="auto-tag-empty">No auto-tag rules yet.</p>}
+        {rules.map((rule, index) => (
+          <div className="auto-tag-rule" key={rule.id}>
+            <span className="auto-tag-rule-number">{String(index + 1).padStart(2, '0')}</span>
+            <div className="auto-tag-condition">
+              <label>
+                <span>Field</span>
+                <select aria-label={`Auto-tag rule ${index + 1} field`} onChange={event => updateRule(rule.id, 'field', event.target.value)} value={rule.field}>
+                  <option value="name">name</option>
+                  <option value="tracker_url">tracker URL</option>
+                </select>
+              </label>
+              <label>
+                <span>Match</span>
+                <select aria-label={`Auto-tag rule ${index + 1} match`} onChange={event => updateRule(rule.id, 'operator', event.target.value)} value={rule.operator}>
+                  <option value="contains">contains</option>
+                  <option value="like">like</option>
+                </select>
+              </label>
+              <label className="auto-tag-pattern">
+                <span>String</span>
+                <input aria-label={`Auto-tag rule ${index + 1} string`} onChange={event => updateRule(rule.id, 'value', event.target.value)} placeholder={rule.operator === 'like' ? '%S%E%' : 'tracker.com'} type="text" value={rule.value} />
+              </label>
+            </div>
+            <div className="auto-tag-result">
+              <label className="auto-tag-value">
+                <span>Tag</span>
+                <input aria-label={`Auto-tag rule ${index + 1} tag`} onChange={event => updateRule(rule.id, 'tag', event.target.value)} placeholder="tvshow" type="text" value={rule.tag} />
+              </label>
+              <button aria-label={`Remove auto-tag rule ${index + 1}`} className="auto-tag-remove" onClick={() => onUpdate(rules.filter(item => item.id !== rule.id))} type="button">Remove</button>
+            </div>
+          </div>
+        ))}
+      </div>
+      <button className="auto-tag-add" onClick={addRule} type="button">+ Add auto-tag rule</button>
+      <p className="settings-hint"><code>contains</code> is a literal substring. <code>like</code> uses <code>%</code> for any sequence and <code>_</code> for one character.</p>
+    </section>
+  );
+}
+
 function SettingValueInput({ name, onUpdate, value }) {
   if (typeof value === 'boolean') {
     return <input checked={value} onChange={event => onUpdate(name, event.target.checked)} type="checkbox" />;
@@ -150,7 +207,7 @@ function AdvancedSection({ onUpdate, settings, status }) {
   );
 }
 
-function SettingsPanel({ notice, onClose, onLogout, onRevert, onSave, onUpdate, settings, status }) {
+function SettingsPanel({ autoTagRules, notice, onAutoTagRulesUpdate, onClose, onLogout, onRevert, onSave, onUpdate, settings, status }) {
   return (
     <div className="settings-overlay" onClick={event => overlayClose(event, onClose)} role="dialog" aria-modal="true" aria-labelledby="settings-title">
       <section className="settings-panel">
@@ -164,6 +221,7 @@ function SettingsPanel({ notice, onClose, onLogout, onRevert, onSave, onUpdate, 
         <div className="settings-body">
           <WebUISection onRevert={onRevert} onUpdate={onUpdate} settings={settings} />
           <InterfaceSection onUpdate={onUpdate} settings={settings} />
+          <AutoTagSection onUpdate={onAutoTagRulesUpdate} rules={autoTagRules} />
           <AccessSection onLogout={onLogout} onUpdate={onUpdate} settings={settings} status={status} />
           <SpeedLimitsSection onUpdate={onUpdate} settings={settings} />
           <QueueingSection onUpdate={onUpdate} settings={settings} />
