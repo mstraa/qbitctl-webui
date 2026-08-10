@@ -127,7 +127,7 @@ function AutoTagSection({ onUpdate, rules }) {
     <section className="settings-section auto-tag-section">
       <div>
         <h3>Auto-tag</h3>
-        <p>Assign tags once, when a newly added torrent appears. Matching is case-insensitive.</p>
+        <p>Assign tags when torrents appear, and retry missed assignments while this page is open. Matching is case-insensitive.</p>
       </div>
       <div className="auto-tag-list">
         {!rules.length && <p className="auto-tag-empty">No auto-tag rules yet.</p>}

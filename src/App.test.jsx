@@ -118,6 +118,202 @@ test('newly observed torrents receive matching name and tracker auto-tags', asyn
   });
 });
 
+test('auto-tag reconciles a previously missed torrent when the app starts', async () => {
+  window.localStorage.setItem('qbitctl.appState.v1', JSON.stringify({
+    autoTagRules: [
+      { id: 'tracker', field: 'tracker_url', operator: 'contains', value: 'tr4ker', tag: 'Tr4ker' },
+    ],
+  }));
+  const missedTorrent = {
+    ...SAMPLE_TORRENTS[0],
+    hash: 'missed-on-startup',
+    added_on: 100,
+    tags: '',
+    tracker: '',
+  };
+  global.fetch.mockImplementation((url, options = {}) => {
+    const value = String(url);
+    if (value.includes('/api/v2/torrents/info')) {
+      return Promise.resolve({ ok: true, status: 200, json: () => Promise.resolve([missedTorrent]) });
+    }
+    if (value.includes('/api/v2/torrents/trackers')) {
+      return Promise.resolve({
+        ok: true,
+        status: 200,
+        json: () => Promise.resolve([{ url: 'https://tk.tr4ker.net/announce/token' }]),
+      });
+    }
+    if (options.method === 'POST') {
+      return Promise.resolve({ ok: true, status: 200, text: () => Promise.resolve('') });
+    }
+    return Promise.reject(new Error('offline'));
+  });
+
+  render(<App />);
+
+  await waitFor(() => {
+    const call = global.fetch.mock.calls.find(([url]) => String(url).includes('/api/v2/torrents/addTags'));
+    expect(call).toBeTruthy();
+    expect(String(call[1].body)).toBe('hashes=missed-on-startup&tags=Tr4ker');
+  });
+});
+
+test('auto-tag retries when tracker metadata appears after the torrent', async () => {
+  window.localStorage.setItem('qbitctl.appState.v1', JSON.stringify({
+    autoTagRules: [
+      { id: 'tracker', field: 'tracker_url', operator: 'contains', value: 'tracker.com', tag: 'Tracker' },
+    ],
+  }));
+  const torrent = {
+    ...SAMPLE_TORRENTS[0],
+    hash: 'delayed-tracker',
+    added_on: 200,
+    tags: '',
+    tracker: '',
+    trackers: undefined,
+  };
+  let now = 1_000;
+  let trackerRequests = 0;
+  let torrentPoll;
+  vi.spyOn(Date, 'now').mockImplementation(() => now);
+  vi.spyOn(window, 'setInterval').mockImplementation(callback => {
+    if (!torrentPoll) torrentPoll = callback;
+    return 1;
+  });
+  global.fetch.mockImplementation((url, options = {}) => {
+    const value = String(url);
+    if (value.includes('/api/v2/torrents/info')) {
+      return Promise.resolve({ ok: true, status: 200, json: () => Promise.resolve([torrent]) });
+    }
+    if (value.includes('/api/v2/torrents/trackers')) {
+      trackerRequests += 1;
+      return Promise.resolve({
+        ok: true,
+        status: 200,
+        json: () => Promise.resolve(trackerRequests === 1
+          ? [{ url: '** [DHT] **' }]
+          : [{ url: 'https://tracker.com/announce/token' }]),
+      });
+    }
+    if (options.method === 'POST') {
+      return Promise.resolve({ ok: true, status: 200, text: () => Promise.resolve('') });
+    }
+    return Promise.reject(new Error('offline'));
+  });
+
+  render(<App />);
+  await waitFor(() => expect(trackerRequests).toBe(1));
+  expect(global.fetch.mock.calls.some(([url]) => String(url).includes('/api/v2/torrents/addTags'))).toBe(false);
+
+  now += 6_000;
+  await act(async () => torrentPoll());
+
+  await waitFor(() => {
+    expect(trackerRequests).toBe(2);
+    const call = global.fetch.mock.calls.find(([url]) => String(url).includes('/api/v2/torrents/addTags'));
+    expect(String(call[1].body)).toBe('hashes=delayed-tracker&tags=Tracker');
+  });
+});
+
+test('auto-tag retries a failed tag assignment instead of marking it complete', async () => {
+  window.localStorage.setItem('qbitctl.appState.v1', JSON.stringify({
+    autoTagRules: [
+      { id: 'name', field: 'name', operator: 'contains', value: 'Malcom', tag: 'tvshow' },
+    ],
+  }));
+  const torrent = {
+    ...SAMPLE_TORRENTS[0],
+    hash: 'retry-add-tags',
+    added_on: 300,
+    name: 'Malcom.s11e09.hevc.mkv',
+    tags: '',
+  };
+  let now = 1_000;
+  let addTagRequests = 0;
+  let torrentPoll;
+  vi.spyOn(Date, 'now').mockImplementation(() => now);
+  vi.spyOn(window, 'setInterval').mockImplementation(callback => {
+    if (!torrentPoll) torrentPoll = callback;
+    return 1;
+  });
+  global.fetch.mockImplementation((url, options = {}) => {
+    const value = String(url);
+    if (value.includes('/api/v2/torrents/info')) {
+      return Promise.resolve({ ok: true, status: 200, json: () => Promise.resolve([torrent]) });
+    }
+    if (value.includes('/api/v2/torrents/createTags')) {
+      return Promise.resolve({ ok: true, status: 200, text: () => Promise.resolve('') });
+    }
+    if (value.includes('/api/v2/torrents/addTags')) {
+      addTagRequests += 1;
+      return Promise.resolve(addTagRequests === 1
+        ? { ok: false, status: 500, text: () => Promise.resolve('temporary failure') }
+        : { ok: true, status: 200, text: () => Promise.resolve('') });
+    }
+    if (options.method === 'POST') {
+      return Promise.resolve({ ok: true, status: 200, text: () => Promise.resolve('') });
+    }
+    return Promise.reject(new Error('offline'));
+  });
+
+  render(<App />);
+  await waitFor(() => expect(addTagRequests).toBe(1));
+
+  now += 6_000;
+  await act(async () => torrentPoll());
+
+  await waitFor(() => expect(addTagRequests).toBe(2));
+  now += 6_000;
+  await act(async () => torrentPoll());
+  expect(addTagRequests).toBe(2);
+});
+
+test('completed auto-tag reconciliation is remembered across page reloads', async () => {
+  window.localStorage.setItem('qbitctl.appState.v1', JSON.stringify({
+    autoTagRules: [
+      { id: 'name', field: 'name', operator: 'contains', value: 'Malcom', tag: 'tvshow' },
+    ],
+  }));
+  const torrent = {
+    ...SAMPLE_TORRENTS[0],
+    hash: 'remember-completion',
+    added_on: 400,
+    name: 'Malcom.s11e09.hevc.mkv',
+    tags: '',
+  };
+  let addTagRequests = 0;
+  global.fetch.mockImplementation((url, options = {}) => {
+    const value = String(url);
+    if (value.includes('/api/v2/torrents/info')) {
+      return Promise.resolve({ ok: true, status: 200, json: () => Promise.resolve([torrent]) });
+    }
+    if (value.includes('/api/v2/torrents/addTags')) {
+      addTagRequests += 1;
+      return Promise.resolve({ ok: true, status: 200, text: () => Promise.resolve('') });
+    }
+    if (options.method === 'POST') {
+      return Promise.resolve({ ok: true, status: 200, text: () => Promise.resolve('') });
+    }
+    return Promise.reject(new Error('offline'));
+  });
+
+  const firstRender = render(<App />);
+  await waitFor(() => expect(addTagRequests).toBe(1));
+  await firstRender.findByText('tvshow');
+  firstRender.unmount();
+
+  expect(readStoredCompletionIds()).toContain('remember-completion:400');
+  const secondRender = render(<App />);
+  await secondRender.findByText('Malcom.s11e09.hevc.mkv');
+  await act(async () => Promise.resolve());
+  expect(addTagRequests).toBe(1);
+});
+
+function readStoredCompletionIds() {
+  const stored = JSON.parse(window.localStorage.getItem('qbitctl.appState.v1'));
+  return stored.autoTagCompletion?.torrentIds || [];
+}
+
 test('sidebar offers Stopped but no Paused filter', async () => {
   const { findByLabelText } = render(<App />);
   const nav = await findByLabelText('Torrent filters');

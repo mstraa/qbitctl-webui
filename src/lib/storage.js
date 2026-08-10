@@ -88,6 +88,17 @@ export function readStoredAutoTagRules() {
   return normalizeAutoTagRules(readAppState().autoTagRules);
 }
 
+export function readStoredAutoTagCompletion() {
+  const candidate = readAppState().autoTagCompletion;
+  if (!candidate || typeof candidate !== 'object') {
+    return { signature: '', torrentIds: [] };
+  }
+  return {
+    signature: typeof candidate.signature === 'string' ? candidate.signature : '',
+    torrentIds: normalizeStringArray(candidate.torrentIds),
+  };
+}
+
 function normalizeStringArray(candidate) {
   if (!Array.isArray(candidate)) {
     return [];
