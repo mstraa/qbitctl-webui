@@ -7,6 +7,7 @@ import {
   normalizeTagFilters,
   pickUiSettings,
   readAppState,
+  readStoredAutoTagCompletion,
   readStoredAutoTagRules,
   readStoredUiSettings,
   writeAppState,
@@ -58,6 +59,20 @@ test('readStoredAutoTagRules normalizes locally stored rules', () => {
   expect(readStoredAutoTagRules()).toEqual([
     { id: 'one', field: 'tracker_url', operator: 'contains', value: 'tracker.com', tag: 'Tracker' },
   ]);
+});
+
+test('readStoredAutoTagCompletion normalizes the reconciliation cache', () => {
+  expect(readStoredAutoTagCompletion()).toEqual({ signature: '', torrentIds: [] });
+  writeAppState({
+    autoTagCompletion: {
+      signature: 'rules-v1',
+      torrentIds: ['hash:1', '', 3, 'hash:1', 'hash:2'],
+    },
+  });
+  expect(readStoredAutoTagCompletion()).toEqual({
+    signature: 'rules-v1',
+    torrentIds: ['hash:1', 'hash:2'],
+  });
 });
 
 test('normalizeSort falls back to name/asc for unknown columns', () => {

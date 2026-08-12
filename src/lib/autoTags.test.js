@@ -1,7 +1,11 @@
 import {
+  autoTagRulesSignature,
+  autoTagTorrentId,
+  isAutoTagMetadataPending,
   matchingAutoTags,
   matchesAutoTagValue,
   normalizeAutoTagRules,
+  realTrackerUrls,
   trackerUrlsFrom,
 } from './autoTags';
 
@@ -39,4 +43,34 @@ test('normalization repairs stored rules and tracker extraction accepts API shap
     { tracker: 'udp://current', trackers: [{ url: 'https://embedded' }] },
     ['udp://current', { url: 'https://reported' }, { msg: 'ignored' }]
   )).toEqual(['udp://current', 'https://embedded', 'https://reported']);
+});
+
+test('rule signatures ignore editor IDs and order but change with effective matching rules', () => {
+  const first = [
+    { id: 'one', field: 'name', operator: 'contains', value: ' Linux ', tag: 'ISO' },
+    { id: 'two', field: 'tracker_url', operator: 'contains', value: 'tracker.com', tag: 'Tracker' },
+  ];
+  const reordered = [
+    { ...first[1], id: 'replacement-id' },
+    { ...first[0], id: 'another-id' },
+  ];
+  expect(autoTagRulesSignature(reordered)).toBe(autoTagRulesSignature(first));
+  expect(autoTagRulesSignature([{ ...first[0], value: 'debian' }])).not.toBe(autoTagRulesSignature(first));
+  expect(autoTagRulesSignature([{ ...first[0], tag: 'iso' }])).not.toBe(autoTagRulesSignature([first[0]]));
+});
+
+test('torrent reconciliation IDs distinguish a torrent re-added at a later time', () => {
+  expect(autoTagTorrentId({ hash: 'same-hash', added_on: 10 })).toBe('same-hash:10');
+  expect(autoTagTorrentId({ hash: 'same-hash', added_on: 11 })).toBe('same-hash:11');
+});
+
+test('metadata readiness and real tracker filtering reject transient qBittorrent values', () => {
+  expect(isAutoTagMetadataPending({ name: '', state: 'metaDL' })).toBe(true);
+  expect(isAutoTagMetadataPending({ name: 'release', state: 'downloading' })).toBe(false);
+  expect(realTrackerUrls([
+    '** [DHT] **',
+    '** [PeX] **',
+    '** [LSD] **',
+    'https://tracker.com/announce',
+  ])).toEqual(['https://tracker.com/announce']);
 });

@@ -1,6 +1,8 @@
 const AUTO_TAG_FIELDS = new Set(['name', 'tracker_url']);
 const AUTO_TAG_OPERATORS = new Set(['contains', 'like']);
 
+export const AUTO_TAG_CONCURRENCY = 6;
+
 export function createAutoTagRule(overrides = {}) {
   return {
     id: overrides.id || `auto-tag-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`,
@@ -22,6 +24,27 @@ export function normalizeAutoTagRules(candidate) {
       ...rule,
       id: typeof rule.id === 'string' && rule.id ? rule.id : `stored-auto-tag-${index}`,
     }));
+}
+
+export function autoTagRulesSignature(rules) {
+  const effectiveRules = normalizeAutoTagRules(rules)
+    .map(rule => ({
+      field: rule.field,
+      operator: rule.operator,
+      value: rule.value.trim().toLowerCase(),
+      tag: rule.tag.trim(),
+    }))
+    .filter(rule => rule.value && rule.tag)
+    .sort((left, right) => JSON.stringify(left).localeCompare(JSON.stringify(right)));
+  return JSON.stringify(effectiveRules);
+}
+
+export function autoTagTorrentId(torrent) {
+  return `${torrent?.hash || ''}:${torrent?.added_on || 0}`;
+}
+
+export function isAutoTagMetadataPending(torrent) {
+  return !torrent?.name || String(torrent.state || '').toLowerCase().includes('meta');
 }
 
 export function matchesAutoTagValue(input, operator, pattern) {
@@ -78,4 +101,8 @@ export function trackerUrlsFrom(torrent, trackers = []) {
   (torrent?.trackers || []).forEach(add);
   (trackers || []).forEach(add);
   return urls;
+}
+
+export function realTrackerUrls(urls) {
+  return (urls || []).filter(url => url && !/^\*\* \[(dht|pex|lsd)\] \*\*$/i.test(url));
 }

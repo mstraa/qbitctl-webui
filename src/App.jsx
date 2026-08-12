@@ -14,7 +14,15 @@ import VersionModal from './components/VersionModal';
 import { createInitialSpeedHistory } from './components/SpeedHistoryGraph';
 import { COLUMNS, DEFAULT_SETTINGS, GITHUB_REPO } from './lib/constants';
 import { isNewerVersion } from './lib/format';
-import { matchingAutoTags, trackerUrlsFrom } from './lib/autoTags';
+import {
+  AUTO_TAG_CONCURRENCY,
+  autoTagRulesSignature,
+  autoTagTorrentId,
+  isAutoTagMetadataPending,
+  matchingAutoTags,
+  realTrackerUrls,
+  trackerUrlsFrom,
+} from './lib/autoTags';
 import { SAMPLE_TORRENTS } from './lib/sampleData';
 import {
   APP_STATE_STORAGE_KEY,
@@ -25,6 +33,7 @@ import {
   normalizeTagFilters,
   pickUiSettings,
   readAppState,
+  readStoredAutoTagCompletion,
   readStoredAutoTagRules,
   readStoredUiSettings,
   writeAppState,
@@ -94,7 +103,12 @@ function App() {
     ...readStoredUiSettings(),
   }));
   const [autoTagRules, setAutoTagRules] = useState(readStoredAutoTagRules);
-  const observedAutoTagHashes = useRef(null);
+  const autoTagCompletion = useRef(readStoredAutoTagCompletion());
+  const autoTagQueue = useRef(new Map());
+  const autoTagProcessing = useRef(new Set());
+  const autoTagRetry = useRef(new Map());
+  const autoTagPersistTimer = useRef(null);
+  const autoTagMounted = useRef(true);
   const [notice, setNotice] = useState('');
   const [selectedMeta, setSelectedMeta] = useState({});
   const [tagEditorOpen, setTagEditorOpen] = useState(false);
@@ -115,6 +129,179 @@ function App() {
 
   const appVersion = import.meta.env.VITE_APP_VERSION || '0.0.0';
   const updateAvailable = latestRelease.checked && isNewerVersion(latestRelease.version, appVersion);
+  const autoTagSignature = useMemo(() => autoTagRulesSignature(autoTagRules), [autoTagRules]);
+  const autoTagRulesRef = useRef(autoTagRules);
+  const autoTagSignatureRef = useRef(autoTagSignature);
+  autoTagRulesRef.current = autoTagRules;
+  autoTagSignatureRef.current = autoTagSignature;
+
+  function persistAutoTagCompletion() {
+    const completion = autoTagCompletion.current;
+    writeAppState({
+      autoTagCompletion: {
+        signature: completion.signature,
+        torrentIds: completion.torrentIds,
+      },
+    });
+  }
+
+  function scheduleAutoTagCompletionSave() {
+    if (autoTagPersistTimer.current) {
+      window.clearTimeout(autoTagPersistTimer.current);
+    }
+    autoTagPersistTimer.current = window.setTimeout(() => {
+      autoTagPersistTimer.current = null;
+      persistAutoTagCompletion();
+    }, 250);
+  }
+
+  function markAutoTagCompleted(torrentId, signature) {
+    const completion = autoTagCompletion.current;
+    if (signature !== autoTagSignatureRef.current || completion.signature !== signature) {
+      return;
+    }
+    autoTagRetry.current.delete(torrentId);
+    if (!completion.torrentIds.includes(torrentId)) {
+      completion.torrentIds.push(torrentId);
+      scheduleAutoTagCompletionSave();
+    }
+  }
+
+  function scheduleAutoTagRetry(torrentId, error) {
+    const previous = autoTagRetry.current.get(torrentId);
+    const attempts = (previous?.attempts || 0) + 1;
+    const delay = Math.min(60_000, 5_000 * (2 ** Math.min(attempts - 1, 4)));
+    autoTagRetry.current.set(torrentId, {
+      attempts,
+      nextAttempt: Date.now() + delay,
+    });
+    if (error) {
+      console.warn(`Auto-tag attempt ${attempts} failed; retrying.`, error);
+    }
+  }
+
+  function mergeAutoTagsIntoTorrent(torrentId, addedTags, signature) {
+    if (!addedTags.length || !autoTagMounted.current || signature !== autoTagSignatureRef.current) {
+      return;
+    }
+    setTorrents(current => current.map(torrent => {
+      if (autoTagTorrentId(torrent) !== torrentId) {
+        return torrent;
+      }
+      const tags = parseTags(torrent.tags);
+      const known = new Set(tags.map(tag => tag.toLowerCase()));
+      addedTags.forEach(tag => {
+        if (!known.has(tag.toLowerCase())) {
+          tags.push(tag);
+          known.add(tag.toLowerCase());
+        }
+      });
+      return { ...torrent, tags: tags.join(', ') };
+    }));
+  }
+
+  async function assignMissingAutoTags(torrent, desiredTags, knownTags, signature) {
+    if (signature !== autoTagSignatureRef.current) {
+      return [];
+    }
+    const known = new Set(knownTags.map(tag => tag.toLowerCase()));
+    const missing = desiredTags.filter(tag => !known.has(tag.toLowerCase()));
+    if (!missing.length) {
+      return [];
+    }
+    const tags = missing.join(',');
+    await postForm('/api/v2/torrents/createTags', { tags });
+    if (signature !== autoTagSignatureRef.current) {
+      return [];
+    }
+    await postForm('/api/v2/torrents/addTags', { hashes: torrent.hash, tags });
+    return missing;
+  }
+
+  async function reconcileAutoTagTorrent(torrent, rules, signature) {
+    if (signature !== autoTagSignatureRef.current || isAutoTagMetadataPending(torrent)) {
+      return { completed: false, addedTags: [] };
+    }
+
+    const nameRules = rules.filter(rule => rule.field === 'name');
+    const trackerRules = rules.filter(rule => rule.field === 'tracker_url');
+    const knownTags = parseTags(torrent.tags);
+    const nameTags = matchingAutoTags(torrent, nameRules);
+    if (!trackerRules.length) {
+      const addedTags = await assignMissingAutoTags(torrent, nameTags, knownTags, signature);
+      return { completed: signature === autoTagSignatureRef.current, addedTags };
+    }
+
+    const response = await fetch(`/api/v2/torrents/trackers?hash=${encodeURIComponent(torrent.hash)}`, {
+      credentials: 'same-origin',
+    });
+    if (!response.ok) {
+      throw new Error(`Tracker lookup returned HTTP ${response.status}`);
+    }
+    const reportedTrackers = await response.json();
+    const trackerUrls = realTrackerUrls(trackerUrlsFrom(torrent, reportedTrackers));
+    // Magnet metadata and tracker lists can arrive after the torrent itself.
+    // Keep this item pending until qBittorrent exposes a real tracker URL.
+    if (!trackerUrls.length) {
+      const addedTags = await assignMissingAutoTags(torrent, nameTags, knownTags, signature);
+      return { completed: false, addedTags };
+    }
+
+    const desiredTags = matchingAutoTags(torrent, rules, trackerUrls);
+    const addedTags = await assignMissingAutoTags(torrent, desiredTags, knownTags, signature);
+    return { completed: signature === autoTagSignatureRef.current, addedTags };
+  }
+
+  function takeNextAutoTagEntry() {
+    let next = null;
+    autoTagQueue.current.forEach((entry, torrentId) => {
+      if (!next || Number(entry.torrent.added_on || 0) > Number(next.entry.torrent.added_on || 0)) {
+        next = { torrentId, entry };
+      }
+    });
+    if (next) {
+      autoTagQueue.current.delete(next.torrentId);
+    }
+    return next;
+  }
+
+  function drainAutoTagQueue() {
+    if (!autoTagMounted.current) {
+      return;
+    }
+    while (autoTagProcessing.current.size < AUTO_TAG_CONCURRENCY && autoTagQueue.current.size) {
+      const next = takeNextAutoTagEntry();
+      if (!next) {
+        return;
+      }
+      const { torrentId, entry } = next;
+      if (entry.signature !== autoTagSignatureRef.current) {
+        continue;
+      }
+      autoTagProcessing.current.add(torrentId);
+      reconcileAutoTagTorrent(entry.torrent, autoTagRulesRef.current, entry.signature)
+        .then(result => {
+          if (!autoTagMounted.current) {
+            return;
+          }
+          mergeAutoTagsIntoTorrent(torrentId, result.addedTags, entry.signature);
+          if (result.completed) {
+            markAutoTagCompleted(torrentId, entry.signature);
+          } else if (entry.signature === autoTagSignatureRef.current) {
+            scheduleAutoTagRetry(torrentId);
+          }
+        })
+        .catch(error => {
+          if (autoTagMounted.current && entry.signature === autoTagSignatureRef.current) {
+            scheduleAutoTagRetry(torrentId, error);
+          }
+        })
+        .finally(() => {
+          autoTagProcessing.current.delete(torrentId);
+          drainAutoTagQueue();
+        });
+    }
+  }
 
   const selectedTorrent = primaryHash
     ? torrents.find(torrent => torrent.hash === primaryHash)
@@ -297,75 +484,49 @@ function App() {
   }, []);
 
   useEffect(() => {
-    if (status !== 'live') {
-      observedAutoTagHashes.current = null;
+    if (autoTagCompletion.current.signature !== autoTagSignature) {
+      autoTagCompletion.current = { signature: autoTagSignature, torrentIds: [] };
+      autoTagQueue.current.clear();
+      autoTagRetry.current.clear();
+      scheduleAutoTagCompletionSave();
+    }
+    if (status !== 'live' || autoTagSignature === '[]') {
       return;
     }
 
-    // Existing torrents form the baseline. Rules only run for hashes that
-    // appear later, including torrents added by another qBittorrent client.
-    if (observedAutoTagHashes.current === null) {
-      observedAutoTagHashes.current = new Set(torrents.map(torrent => torrent.hash));
-      return;
+    const liveTorrentIds = new Set(torrents.map(autoTagTorrentId));
+    const retainedTorrentIds = autoTagCompletion.current.torrentIds
+      .filter(torrentId => liveTorrentIds.has(torrentId));
+    if (retainedTorrentIds.length !== autoTagCompletion.current.torrentIds.length) {
+      autoTagCompletion.current.torrentIds = retainedTorrentIds;
+      scheduleAutoTagCompletionSave();
     }
-
-    const newTorrents = torrents.filter(torrent => !observedAutoTagHashes.current.has(torrent.hash));
-    newTorrents.forEach(torrent => observedAutoTagHashes.current.add(torrent.hash));
-    if (!newTorrents.length || !autoTagRules.length) {
-      return;
-    }
-
-    let cancelled = false;
-    const needsTrackers = autoTagRules.some(rule => rule.field === 'tracker_url' && rule.value.trim() && rule.tag.trim());
-
-    newTorrents.forEach(async torrent => {
-      let trackerUrls = trackerUrlsFrom(torrent);
-      if (needsTrackers) {
-        try {
-          const response = await fetch(`/api/v2/torrents/trackers?hash=${encodeURIComponent(torrent.hash)}`, {
-            credentials: 'same-origin',
-          });
-          if (response.ok) {
-            trackerUrls = trackerUrlsFrom(torrent, await response.json());
-          }
-        } catch {
-          // The current tracker from torrents/info can still satisfy the rule.
-        }
-      }
-
-      const existingTags = parseTags(torrent.tags);
-      const existingKeys = new Set(existingTags.map(tag => tag.toLowerCase()));
-      const tagsToAdd = matchingAutoTags(torrent, autoTagRules, trackerUrls)
-        .filter(tag => !existingKeys.has(tag.toLowerCase()));
-      if (!tagsToAdd.length) {
-        return;
-      }
-
-      try {
-        await postForm('/api/v2/torrents/createTags', { tags: tagsToAdd.join(',') });
-      } catch {
-        // Duplicate tags are expected; assigning them below is authoritative.
-      }
-
-      try {
-        await postForm('/api/v2/torrents/addTags', {
-          hashes: torrent.hash,
-          tags: tagsToAdd.join(','),
-        });
-        if (!cancelled) {
-          setTorrents(current => current.map(item => item.hash === torrent.hash
-            ? { ...item, tags: existingTags.concat(tagsToAdd).join(', ') }
-            : item));
-        }
-      } catch {
-        // A later qBittorrent poll remains the source of truth after failure.
+    const completed = new Set(autoTagCompletion.current.torrentIds);
+    const now = Date.now();
+    torrents.forEach(torrent => {
+      const torrentId = autoTagTorrentId(torrent);
+      const retry = autoTagRetry.current.get(torrentId);
+      if (!completed.has(torrentId) &&
+          !autoTagProcessing.current.has(torrentId) &&
+          (!retry || retry.nextAttempt <= now)) {
+        autoTagQueue.current.set(torrentId, { signature: autoTagSignature, torrent });
       }
     });
+    drainAutoTagQueue();
+  // The queue helpers use refs so in-flight work survives polling renders.
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [autoTagSignature, status, torrents]);
 
+  useEffect(() => {
+    autoTagMounted.current = true;
     return () => {
-      cancelled = true;
+      autoTagMounted.current = false;
+      if (autoTagPersistTimer.current) {
+        window.clearTimeout(autoTagPersistTimer.current);
+      }
+      persistAutoTagCompletion();
     };
-  }, [autoTagRules, status, torrents]);
+  }, []);
 
   useEffect(() => {
     let cancelled = false;
