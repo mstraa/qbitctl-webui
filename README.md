@@ -32,7 +32,7 @@ Dark, terminal-inspired qBittorrent WebUI built with React. The interface keeps 
 - Batch tracker management with add, replace, and confirmed removal across the current selection, including per-URL torrent counts and partial-failure feedback.
 - Remove confirmation modal with an optional `Delete downloaded data` checkbox (off by default).
 - Add modal accepting multiple `.torrent` files and magnet/URL paste, with tags applied at add time and an `Add stopped` option for import workflows (add stopped, recheck, then resume).
-- Retrying auto-tag rules for new and previously missed torrents, matching names or tracker URLs with literal `contains` or SQL-style `like` patterns.
+- Retrying auto-tag rules for new and previously missed torrents, matching names or tracker URLs with literal `contains` or SQL-style `like` patterns. Rules are staged while you edit them and only applied when settings are saved.
 
 ### Torrent details
 

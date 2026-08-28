@@ -127,7 +127,7 @@ function AutoTagSection({ onUpdate, rules }) {
     <section className="settings-section auto-tag-section">
       <div>
         <h3>Auto-tag</h3>
-        <p>Assign tags when torrents appear, and retry missed assignments while this page is open. Matching is case-insensitive.</p>
+        <p>Assign tags when torrents appear, and retry missed assignments while this page is open. Matching is case-insensitive. Rules only take effect once you save settings.</p>
       </div>
       <div className="auto-tag-list">
         {!rules.length && <p className="auto-tag-empty">No auto-tag rules yet.</p>}
@@ -207,7 +207,13 @@ function AdvancedSection({ onUpdate, settings, status }) {
   );
 }
 
-function SettingsPanel({ autoTagRules, notice, onAutoTagRulesUpdate, onClose, onLogout, onRevert, onSave, onUpdate, settings, status }) {
+function SettingsPanel({ autoTagRules, notice, onClose, onLogout, onRevert, onSave, onUpdate, settings, status }) {
+  // Auto-tag rules are staged like every other setting in this panel. The
+  // reconciler only sees them on save, so typing a tag one character at a
+  // time can no longer apply "T", "Tr", "Tr4"... across the whole library
+  // before the field is finished.
+  const [autoTagDraft, setAutoTagDraft] = useState(autoTagRules);
+
   return (
     <div className="settings-overlay" onClick={event => overlayClose(event, onClose)} role="dialog" aria-modal="true" aria-labelledby="settings-title">
       <section className="settings-panel">
@@ -221,7 +227,7 @@ function SettingsPanel({ autoTagRules, notice, onAutoTagRulesUpdate, onClose, on
         <div className="settings-body">
           <WebUISection onRevert={onRevert} onUpdate={onUpdate} settings={settings} />
           <InterfaceSection onUpdate={onUpdate} settings={settings} />
-          <AutoTagSection onUpdate={onAutoTagRulesUpdate} rules={autoTagRules} />
+          <AutoTagSection onUpdate={setAutoTagDraft} rules={autoTagDraft} />
           <AccessSection onLogout={onLogout} onUpdate={onUpdate} settings={settings} status={status} />
           <SpeedLimitsSection onUpdate={onUpdate} settings={settings} />
           <QueueingSection onUpdate={onUpdate} settings={settings} />
@@ -232,7 +238,7 @@ function SettingsPanel({ autoTagRules, notice, onAutoTagRulesUpdate, onClose, on
           <span>{notice || 'Settings are staged locally until saved.'}</span>
           <div>
             <button onClick={onClose} type="button">Close</button>
-            <button className="save-settings" onClick={onSave} type="button">Save settings</button>
+            <button className="save-settings" onClick={() => onSave(autoTagDraft)} type="button">Save settings</button>
           </div>
         </footer>
       </section>

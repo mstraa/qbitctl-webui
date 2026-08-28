@@ -55,6 +55,7 @@ test('settings can create and persist an auto-tag rule', async () => {
   fireEvent.change(getByLabelText('Auto-tag rule 1 field'), { target: { value: 'tracker_url' } });
   fireEvent.change(getByLabelText('Auto-tag rule 1 string'), { target: { value: 'tracker.com' } });
   fireEvent.change(getByLabelText('Auto-tag rule 1 tag'), { target: { value: 'Tracker' } });
+  fireEvent.click(getByText('Save settings'));
 
   await waitFor(() => {
     const stored = JSON.parse(window.localStorage.getItem('qbitctl.appState.v1'));
@@ -62,6 +63,51 @@ test('settings can create and persist an auto-tag rule', async () => {
       { field: 'tracker_url', operator: 'contains', value: 'tracker.com', tag: 'Tracker' },
     ]);
   });
+});
+
+test('a tag typed one character at a time is only applied once, on save', async () => {
+  const applied = [];
+  global.fetch.mockImplementation((url, options = {}) => {
+    const value = String(url);
+    if (value.includes('/api/v2/torrents/info')) {
+      return Promise.resolve({ ok: true, status: 200, json: () => Promise.resolve(SAMPLE_TORRENTS) });
+    }
+    if (value.includes('/api/v2/torrents/trackers')) {
+      return Promise.resolve({
+        ok: true,
+        status: 200,
+        json: () => Promise.resolve([{ url: 'https://tracker.com/announce/cdjhfdkjshdjksfhd' }]),
+      });
+    }
+    if (options.method === 'POST' && value.includes('/addTags')) {
+      applied.push(String(options.body));
+      return Promise.resolve({ ok: true, status: 200, text: () => Promise.resolve('') });
+    }
+    if (options.method === 'POST' && (value.includes('/createTags') || value.includes('/setPreferences'))) {
+      return Promise.resolve({ ok: true, status: 200, text: () => Promise.resolve('') });
+    }
+    return Promise.reject(new Error('offline'));
+  });
+
+  const { findByText, getByLabelText, getByText } = render(<App />);
+  await findByText('archlinux-2026.05.01-x86_64.iso');
+  fireEvent.click(getByLabelText('Settings'));
+  fireEvent.click(getByText('+ Add auto-tag rule'));
+  fireEvent.change(getByLabelText('Auto-tag rule 1 field'), { target: { value: 'tracker_url' } });
+  fireEvent.change(getByLabelText('Auto-tag rule 1 string'), { target: { value: 'tracker.com' } });
+
+  // Every keystroke used to be a live rule, which tagged the whole library
+  // with each prefix of the tag being typed.
+  for (const partial of ['T', 'Tr', 'Tr4', 'Tr4k', 'Tr4ke', 'Tr4ker']) {
+    fireEvent.change(getByLabelText('Auto-tag rule 1 tag'), { target: { value: partial } });
+    await act(async () => {});
+  }
+  expect(applied).toEqual([]);
+  expect(JSON.parse(window.localStorage.getItem('qbitctl.appState.v1')).autoTagRules).toEqual([]);
+
+  fireEvent.click(getByText('Save settings'));
+  await waitFor(() => expect(applied.length).toBeGreaterThan(0));
+  applied.forEach(body => expect(body).toContain('tags=Tr4ker'));
 });
 
 test('newly observed torrents receive matching name and tracker auto-tags', async () => {
