@@ -1046,9 +1046,14 @@ function App() {
     setSettings(current => ({ ...current, [key]: value }));
   }
 
-  function saveSettings() {
+  function saveSettings(nextAutoTagRules) {
+    // Auto-tag rules are staged in the settings panel and committed here, so
+    // the reconciler never runs against a half-typed tag.
+    if (Array.isArray(nextAutoTagRules)) {
+      setAutoTagRules(nextAutoTagRules);
+    }
     if (status !== 'live') {
-      setNotice('Not connected: settings were not written to qBittorrent.');
+      setNotice('Not connected: auto-tag rules were saved locally, qBittorrent settings were not written.');
       return;
     }
     fetch('/api/v2/app/setPreferences', {
@@ -1527,7 +1532,6 @@ function App() {
         <SettingsPanel
           autoTagRules={autoTagRules}
           notice={notice}
-          onAutoTagRulesUpdate={setAutoTagRules}
           onClose={() => setSettingsOpen(false)}
           onLogout={logOut}
           onRevert={revertWebUI}
