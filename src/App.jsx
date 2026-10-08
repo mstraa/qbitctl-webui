@@ -1506,7 +1506,11 @@ function App() {
             type="search"
             value={query}
           />
-          <span>{selectedCount ? `${selectedCount} selected` : `synced ${lastSync || '--:--:--'}`}</span>
+          <span title={`synced ${lastSync || '--:--:--'}`}>
+            {selectedCount
+              ? `${selectedCount} selected / ${visibleTorrents.length} filtered`
+              : `${visibleTorrents.length} filtered`}
+          </span>
         </section>
 
         <TorrentTable

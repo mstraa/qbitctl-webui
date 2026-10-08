@@ -1012,6 +1012,20 @@ test('ratio shows under the progress percentage and stays sortable', async () =>
   expect(sorted).toEqual([...sorted].sort((a, b) => a - b));
 });
 
+test('command row shows the filtered count, with the selection when there is one', async () => {
+  const { container, findByText, getByLabelText, getByText } = render(<App />);
+  const row = (await findByText('archlinux-2026.05.01-x86_64.iso')).closest('.torrent-row');
+  const status = () => container.querySelector('.command-row > span').textContent;
+  expect(status()).toBe(`${SAMPLE_TORRENTS.length} filtered`);
+
+  fireEvent.change(getByLabelText('grep'), { target: { value: 'archlinux' } });
+  expect(status()).toBe('1 filtered');
+
+  fireEvent.click(row);
+  expect(status()).toBe('1 selected / 1 filtered');
+  expect(getByText('1 selected / 1 filtered')).toBeInTheDocument();
+});
+
 test('add modal accepts multiple torrent files and tags', async () => {
   const { findByLabelText, findByText, getByLabelText, getByText } = render(<App />);
   await findByText('archlinux-2026.05.01-x86_64.iso');
