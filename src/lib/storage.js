@@ -1,4 +1,4 @@
-import { COLUMNS, FILTERS } from './constants';
+import { COLUMNS, FILTERS, columnSortKeys } from './constants';
 import { normalizeAutoTagRules } from './autoTags';
 
 export const APP_STATE_STORAGE_KEY = 'qbitctl.appState.v1';
@@ -9,6 +9,7 @@ const UI_SETTING_KEYS = [
   'ui_show_tag_filters',
   'ui_show_ratio_progress',
   'ui_show_queue_column',
+  'ui_show_size_column',
   'ui_version_check_enabled',
   'ui_table_density',
 ];
@@ -52,7 +53,7 @@ export function normalizeSort(candidate) {
   if (!candidate || typeof candidate !== 'object') {
     return fallback;
   }
-  const columnExists = COLUMNS.some(column => column.key === candidate.key);
+  const columnExists = columnSortKeys(COLUMNS).includes(candidate.key);
   const direction = candidate.direction === 'desc' ? 'desc' : 'asc';
   return columnExists ? { key: candidate.key, direction } : fallback;
 }
