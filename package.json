@@ -1,6 +1,6 @@
 {
   "name": "qbitctl",
-  "version": "2.3.1",
+  "version": "2.4.0",
   "homepage": ".",
   "private": false,
   "description": "A dark terminal-inspired qBittorrent WebUI.",
