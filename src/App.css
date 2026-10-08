@@ -754,22 +754,16 @@ dd {
 .table-head,
 .torrent-row {
   display: grid;
-  grid-template-columns: minmax(260px, 1.9fr) 140px minmax(170px, 1fr) 90px 90px 70px 80px;
+  /* Tracks come from COLUMNS so optional columns (#, Size) line up. */
+  grid-template-columns: var(--table-columns);
   gap: 12px;
   align-items: center;
-  min-width: 980px;
-}
-
-.queue-column .table-head,
-.queue-column .torrent-row {
-  /* 74px keeps 4-digit queue positions inside the track. */
-  grid-template-columns: 74px minmax(260px, 1.9fr) 140px minmax(170px, 1fr) 90px 90px 70px 80px;
-  min-width: 1066px;
+  min-width: var(--table-min-width);
 }
 
 /* Center the '#' header over the centered queue numbers (the header button
    is a flex box, so text-align would not move it). */
-.queue-column .table-head button:first-child {
+.queue-column .table-head > button:first-child {
   justify-content: center;
 }
 
@@ -799,6 +793,19 @@ dd {
   text-align: left;
   text-transform: uppercase;
   cursor: pointer;
+}
+
+.head-pair {
+  display: flex;
+  gap: 10px;
+  align-items: center;
+  min-width: 0;
+}
+
+.head-pair button + button::before {
+  content: "/";
+  margin-right: 4px;
+  color: var(--faint);
 }
 
 .table-head strong {
@@ -958,9 +965,21 @@ dd {
 .ratio-progress {
   display: block;
   grid-column: 1 / 2;
+  grid-row: 2;
   height: 3px;
   background: #7a7a7a;
   opacity: 0.75;
+}
+
+/* Ratio sits under the percentage, at the end of the ratio bar. */
+.progress-cell .ratio-value {
+  grid-column: 2;
+  grid-row: 2;
+  color: #8a8a8a;
+}
+
+.compact-table .progress-cell {
+  row-gap: 2px;
 }
 
 .compact-table .torrent-row {
@@ -2060,10 +2079,7 @@ dd {
     background: transparent;
   }
 
-  /* Repeated selector so the card layout also beats the two-class
-     .queue-column .torrent-row grid override. */
-  .torrent-row,
-  .queue-column .torrent-row {
+  .torrent-row {
     min-width: 0;
     grid-template-columns: 1fr;
     gap: 9px;

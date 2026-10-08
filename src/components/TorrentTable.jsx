@@ -1,4 +1,4 @@
-import { formatDateShort, formatRatio, formatSpeed } from '../lib/format';
+import { formatBytes, formatDateShort, formatRatio, formatSpeed } from '../lib/format';
 import { formatNameMeta, formatStatus } from '../lib/torrents';
 import { ProgressBar, StatusBadge } from './common';
 
@@ -16,15 +16,32 @@ function TorrentTable({
   sort,
   torrents,
 }) {
+  const showSizeColumn = columns.some(column => column.key === 'size');
+  const gap = 12;
+  const padding = 28;
+  const tableStyle = {
+    '--table-columns': columns.map(column => column.width).join(' '),
+    '--table-min-width': `${columns.reduce((sum, column) => sum + column.minWidth, 0) + gap * (columns.length - 1) + padding}px`,
+  };
+
+  function sortButton(key, label) {
+    return (
+      <button key={key} onClick={() => onSort(key)} type="button">
+        <span>{label}</span>
+        <strong>{sort.key === key ? sort.direction : ''}</strong>
+      </button>
+    );
+  }
+
   return (
-    <section className="torrent-table" aria-label="Torrent list">
+    <section className="torrent-table" aria-label="Torrent list" style={tableStyle}>
       <div className="table-head">
-        {columns.map(column => (
-          <button key={column.key} onClick={() => onSort(column.key)} type="button">
-            <span>{column.label}</span>
-            <strong>{sort.key === column.key ? sort.direction : ''}</strong>
-          </button>
-        ))}
+        {columns.map(column => (column.secondary ? (
+          <span className="head-pair" key={column.key}>
+            {sortButton(column.key, column.label)}
+            {sortButton(column.secondary.key, column.secondary.label)}
+          </span>
+        ) : sortButton(column.key, column.label)))}
       </div>
 
       {torrents.map(torrent => {
@@ -83,16 +100,17 @@ function TorrentTable({
               <small>{formatNameMeta(torrent)}</small>
             </span>
             <span><StatusBadge torrent={torrent} /></span>
+            {showSizeColumn && <span className="size-cell">{formatBytes(torrent.size)}</span>}
             <span className="progress-cell">
               <ProgressBar value={torrent.progress} />
               <small>{Math.round(torrent.progress * 100)}%</small>
               {showRatioProgress && torrent.ratio > 0 && (
                 <span className="ratio-progress" style={{ width: `${Math.min(torrent.ratio, 1) * 100}%` }} />
               )}
+              <small className="ratio-value" title="Ratio">{formatRatio(torrent.ratio)}</small>
             </span>
             <span>{formatSpeed(torrent.dlspeed)}</span>
             <span>{formatSpeed(torrent.upspeed)}</span>
-            <span>{formatRatio(torrent.ratio)}</span>
             <span>{formatDateShort(torrent.added_on)}</span>
           </div>
         );

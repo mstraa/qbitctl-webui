@@ -29,6 +29,7 @@ export const DEFAULT_SETTINGS = {
   ui_show_tag_filters: true,
   ui_show_ratio_progress: true,
   ui_show_queue_column: true,
+  ui_show_size_column: false,
   // Opt-in: while disabled (the default) no GitHub request is ever made.
   ui_version_check_enabled: false,
   ui_table_density: 'normal',
@@ -36,13 +37,26 @@ export const DEFAULT_SETTINGS = {
 
 export const GITHUB_REPO = 'mstraa/qbitctl-webui';
 
+// `width` is the grid track; `minWidth` is its share of the table's minimum
+// width. Ratio has no column of its own: it sits under the progress percentage
+// and stays sortable from the Progress header.
 export const COLUMNS = [
-  { key: 'priority', label: '#' },
-  { key: 'name', label: 'Name' },
-  { key: 'state', label: 'Status' },
-  { key: 'progress', label: 'Progress' },
-  { key: 'dlspeed', label: 'Down' },
-  { key: 'upspeed', label: 'Up' },
-  { key: 'ratio', label: 'Ratio' },
-  { key: 'added_on', label: 'Added' },
+  { key: 'priority', label: '#', width: '74px', minWidth: 74 },
+  { key: 'name', label: 'Name', width: 'minmax(260px, 1.9fr)', minWidth: 260 },
+  { key: 'state', label: 'Status', width: '140px', minWidth: 140 },
+  { key: 'size', label: 'Size', width: '80px', minWidth: 80 },
+  {
+    key: 'progress',
+    label: 'Progress',
+    secondary: { key: 'ratio', label: 'Ratio' },
+    width: 'minmax(170px, 1fr)',
+    minWidth: 170,
+  },
+  { key: 'dlspeed', label: 'Down', width: '90px', minWidth: 90 },
+  { key: 'upspeed', label: 'Up', width: '90px', minWidth: 90 },
+  { key: 'added_on', label: 'Added', width: '80px', minWidth: 80 },
 ];
+
+export function columnSortKeys(columns) {
+  return columns.flatMap(column => (column.secondary ? [column.key, column.secondary.key] : [column.key]));
+}

@@ -962,6 +962,56 @@ test('hiding the queue column resets an active # sort to name', async () => {
   expect(names[0]).toBe('archlinux-2026.05.01-x86_64.iso');
 });
 
+test('Stop All and Resume All target every torrent in live mode', async () => {
+  mockLiveQueueApi();
+  global.fetch.mockImplementation((original => url => {
+    const u = String(url);
+    if (u.includes('/api/v2/torrents/stop') || u.includes('/api/v2/torrents/start')) {
+      return Promise.resolve({ ok: true, status: 200, text: () => Promise.resolve('') });
+    }
+    return original(url);
+  })(global.fetch.getMockImplementation()));
+  const { findByLabelText, findByText } = render(<App />);
+  await findByText('live-one');
+  const toolbar = await findByLabelText('Torrent actions');
+
+  fireEvent.click(within(toolbar).getByText('Stop All'));
+  fireEvent.click(within(toolbar).getByText('Resume All'));
+
+  const stop = global.fetch.mock.calls.find(([url]) => String(url).includes('/api/v2/torrents/stop'));
+  const start = global.fetch.mock.calls.find(([url]) => String(url).includes('/api/v2/torrents/start'));
+  expect(String(stop[1].body)).toBe('hashes=all');
+  expect(String(start[1].body)).toBe('hashes=all');
+});
+
+test('size column is off by default and can be enabled from settings', async () => {
+  const { container, findByText, getByLabelText, getByText, queryByText } = render(<App />);
+  await findByText('archlinux-2026.05.01-x86_64.iso');
+  expect(container.querySelector('.size-cell')).toBeNull();
+  expect(queryByText('Size')).toBeNull();
+
+  fireEvent.click(getByLabelText('Settings'));
+  fireEvent.click(getByText('Size column').closest('label').querySelector('input'));
+
+  expect(container.querySelectorAll('.size-cell')).toHaveLength(SAMPLE_TORRENTS.length);
+  const stored = JSON.parse(window.localStorage.getItem('qbitctl.appState.v1'));
+  expect(stored.settings.ui_show_size_column).toBe(true);
+});
+
+test('ratio shows under the progress percentage and stays sortable', async () => {
+  const { container, findByText, getByText } = render(<App />);
+  await findByText('archlinux-2026.05.01-x86_64.iso');
+
+  const ratios = Array.from(container.querySelectorAll('.progress-cell .ratio-value'))
+    .map(node => node.textContent);
+  expect(ratios).toHaveLength(SAMPLE_TORRENTS.length);
+
+  fireEvent.click(getByText('Ratio'));
+  const sorted = Array.from(container.querySelectorAll('.progress-cell .ratio-value'))
+    .map(node => Number(node.textContent));
+  expect(sorted).toEqual([...sorted].sort((a, b) => a - b));
+});
+
 test('add modal accepts multiple torrent files and tags', async () => {
   const { findByLabelText, findByText, getByLabelText, getByText } = render(<App />);
   await findByText('archlinux-2026.05.01-x86_64.iso');

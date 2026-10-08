@@ -12,7 +12,7 @@ import TorrentTable from './components/TorrentTable';
 import TorrentEditor from './components/TorrentEditor';
 import VersionModal from './components/VersionModal';
 import { createInitialSpeedHistory } from './components/SpeedHistoryGraph';
-import { COLUMNS, DEFAULT_SETTINGS, GITHUB_REPO } from './lib/constants';
+import { COLUMNS, DEFAULT_SETTINGS, GITHUB_REPO, columnSortKeys } from './lib/constants';
 import { isNewerVersion } from './lib/format';
 import {
   AUTO_TAG_CONCURRENCY,
@@ -53,6 +53,13 @@ import {
   parseTags,
   searchableTorrentText,
 } from './lib/torrents';
+
+// qBittorrent 5 renamed pause/resume to stop/start; the second URL keeps 4.x working.
+const TORRENT_ACTION_URLS = {
+  resume: ['/api/v2/torrents/start', '/api/v2/torrents/resume'],
+  stop: ['/api/v2/torrents/stop', '/api/v2/torrents/pause'],
+  recheck: ['/api/v2/torrents/recheck'],
+};
 
 async function postForm(url, values) {
   const response = await fetch(url, {
@@ -693,9 +700,11 @@ function App() {
   const torrentEditorApiVersion = webApiVersion || '2.15.0';
 
   const showQueueColumn = settings.ui_show_queue_column !== false;
-  const tableColumns = showQueueColumn
-    ? COLUMNS
-    : COLUMNS.filter(column => column.key !== 'priority');
+  const showSizeColumn = Boolean(settings.ui_show_size_column);
+  const tableColumns = COLUMNS.filter(column =>
+    (column.key !== 'priority' || showQueueColumn) && (column.key !== 'size' || showSizeColumn)
+  );
+  const sortIsVisible = columnSortKeys(tableColumns).includes(sort.key);
   const maxQueuePriority = useMemo(
     () => torrents.reduce(
       (max, torrent) => (torrent.priority > 0 ? Math.max(max, torrent.priority) : max),
@@ -704,13 +713,13 @@ function App() {
     [torrents]
   );
 
-  // Hiding the queue column would otherwise leave an invisible '#' sort with
-  // no header indicator and no way to change it.
+  // Hiding a column would otherwise leave an invisible sort (e.g. '#' or Size)
+  // with no header indicator and no way to change it.
   useEffect(() => {
-    if (!showQueueColumn && sort.key === 'priority') {
+    if (!sortIsVisible) {
       setSort({ key: 'name', direction: 'asc' });
     }
-  }, [showQueueColumn, sort.key]);
+  }, [sortIsVisible]);
 
   function handleSort(key) {
     setSort(current => ({
@@ -865,19 +874,20 @@ function App() {
       return;
     }
 
-    const actionMap = {
-      resume: ['/api/v2/torrents/start', '/api/v2/torrents/resume'],
-      stop: ['/api/v2/torrents/stop', '/api/v2/torrents/pause'],
-      recheck: ['/api/v2/torrents/recheck'],
-    };
-
     if (status !== 'live') {
       return;
     }
 
     const body = new URLSearchParams({ hashes: selectedActionHashes.join('|') });
 
-    postFirstAvailable(actionMap[action], body);
+    postFirstAvailable(TORRENT_ACTION_URLS[action], body);
+  }
+
+  function handleActionAll(action) {
+    if (status !== 'live') {
+      return;
+    }
+    postFirstAvailable(TORRENT_ACTION_URLS[action], new URLSearchParams({ hashes: 'all' }));
   }
 
   function logIn(username, password) {
@@ -1458,6 +1468,8 @@ function App() {
             <button className="add-button" onClick={openAddModal} type="button">ADD</button>
             <button onClick={() => handleAction('resume')} type="button">Resume</button>
             <button onClick={() => handleAction('stop')} type="button">Stop</button>
+            <button onClick={() => handleActionAll('resume')} title="Resume every torrent" type="button">Resume All</button>
+            <button onClick={() => handleActionAll('stop')} title="Stop every torrent" type="button">Stop All</button>
             <button onClick={() => handleAction('recheck')} type="button">Recheck</button>
             <button
               aria-label="Edit selected torrents"
