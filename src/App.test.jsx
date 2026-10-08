@@ -1026,6 +1026,19 @@ test('command row shows the filtered count, with the selection when there is one
   expect(getByText('1 selected / 1 filtered')).toBeInTheDocument();
 });
 
+test('seeds / peers column is off by default and can be enabled from settings', async () => {
+  const { container, findByText, getByLabelText, getByText } = render(<App />);
+  await findByText('archlinux-2026.05.01-x86_64.iso');
+  expect(container.querySelector('.seeds-cell')).toBeNull();
+
+  fireEvent.click(getByLabelText('Settings'));
+  fireEvent.click(getByText('Seeds / Peers column').closest('label').querySelector('input'));
+
+  expect(container.querySelectorAll('.seeds-cell')).toHaveLength(SAMPLE_TORRENTS.length);
+  const stored = JSON.parse(window.localStorage.getItem('qbitctl.appState.v1'));
+  expect(stored.settings.ui_show_seeds_column).toBe(true);
+});
+
 test('add modal accepts multiple torrent files and tags', async () => {
   const { findByLabelText, findByText, getByLabelText, getByText } = render(<App />);
   await findByText('archlinux-2026.05.01-x86_64.iso');

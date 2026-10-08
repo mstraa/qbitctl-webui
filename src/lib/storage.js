@@ -10,6 +10,7 @@ const UI_SETTING_KEYS = [
   'ui_show_ratio_progress',
   'ui_show_queue_column',
   'ui_show_size_column',
+  'ui_show_seeds_column',
   'ui_version_check_enabled',
   'ui_table_density',
 ];

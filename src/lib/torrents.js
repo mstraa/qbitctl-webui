@@ -94,14 +94,19 @@ export function searchableTorrentText(torrent) {
   ].filter(Boolean).join(' ').toLowerCase();
 }
 
-export function formatSeedPeerCount(torrent) {
+function seedPeerCounts(torrent) {
   const seeds = Number.isFinite(torrent.num_complete)
     ? torrent.num_complete
     : torrent.num_seeds;
   const peers = Number.isFinite(torrent.num_incomplete)
     ? torrent.num_incomplete
     : torrent.num_leechs;
-  return `${seeds || 0} / ${peers || 0}`;
+  return { seeds: seeds || 0, peers: peers || 0 };
+}
+
+export function formatSeedPeerCount(torrent) {
+  const { seeds, peers } = seedPeerCounts(torrent);
+  return `${seeds} / ${peers}`;
 }
 
 export function compareTorrents(left, right, sort) {
@@ -117,6 +122,7 @@ export function compareTorrents(left, right, sort) {
 function sortValue(torrent, key) {
   if (key === 'state') return formatStatus(torrent);
   if (key === 'name') return torrent.name || '';
+  if (key === 'seeds') return seedPeerCounts(torrent).seeds;
   if (key === 'priority') {
     // Unqueued torrents (priority 0/-1) always sort below queued ones.
     return torrent.priority > 0 ? torrent.priority : Number.MAX_SAFE_INTEGER;

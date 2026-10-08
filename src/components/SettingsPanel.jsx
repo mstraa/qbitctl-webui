@@ -52,6 +52,10 @@ function InterfaceSection({ onUpdate, settings }) {
         <input checked={Boolean(settings.ui_show_size_column)} onChange={event => onUpdate('ui_show_size_column', event.target.checked)} type="checkbox" />
       </label>
       <label className="setting-row">
+        <span>Seeds / Peers column</span>
+        <input checked={Boolean(settings.ui_show_seeds_column)} onChange={event => onUpdate('ui_show_seeds_column', event.target.checked)} type="checkbox" />
+      </label>
+      <label className="setting-row">
         <span>Version update check</span>
         <input checked={Boolean(settings.ui_version_check_enabled)} onChange={event => onUpdate('ui_version_check_enabled', event.target.checked)} type="checkbox" />
       </label>

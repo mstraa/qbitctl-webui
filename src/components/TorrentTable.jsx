@@ -1,5 +1,5 @@
 import { formatBytes, formatDateShort, formatRatio, formatSpeed } from '../lib/format';
-import { formatNameMeta, formatStatus } from '../lib/torrents';
+import { formatNameMeta, formatSeedPeerCount, formatStatus } from '../lib/torrents';
 import { ProgressBar, StatusBadge } from './common';
 
 function TorrentTable({
@@ -17,6 +17,7 @@ function TorrentTable({
   torrents,
 }) {
   const showSizeColumn = columns.some(column => column.key === 'size');
+  const showSeedsColumn = columns.some(column => column.key === 'seeds');
   const gap = 12;
   const padding = 28;
   const tableStyle = {
@@ -111,6 +112,7 @@ function TorrentTable({
             </span>
             <span>{formatSpeed(torrent.dlspeed)}</span>
             <span>{formatSpeed(torrent.upspeed)}</span>
+            {showSeedsColumn && <span className="seeds-cell">{formatSeedPeerCount(torrent)}</span>}
             <span>{formatDateShort(torrent.added_on)}</span>
           </div>
         );

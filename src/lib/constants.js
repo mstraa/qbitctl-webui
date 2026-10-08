@@ -30,6 +30,7 @@ export const DEFAULT_SETTINGS = {
   ui_show_ratio_progress: true,
   ui_show_queue_column: true,
   ui_show_size_column: false,
+  ui_show_seeds_column: false,
   // Opt-in: while disabled (the default) no GitHub request is ever made.
   ui_version_check_enabled: false,
   ui_table_density: 'normal',
@@ -54,6 +55,7 @@ export const COLUMNS = [
   },
   { key: 'dlspeed', label: 'Down', width: '90px', minWidth: 90 },
   { key: 'upspeed', label: 'Up', width: '90px', minWidth: 90 },
+  { key: 'seeds', label: 'Seeds / Peers', width: '110px', minWidth: 110 },
   { key: 'added_on', label: 'Added', width: '80px', minWidth: 80 },
 ];
 

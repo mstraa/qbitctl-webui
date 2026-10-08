@@ -700,10 +700,12 @@ function App() {
   const torrentEditorApiVersion = webApiVersion || '2.15.0';
 
   const showQueueColumn = settings.ui_show_queue_column !== false;
-  const showSizeColumn = Boolean(settings.ui_show_size_column);
-  const tableColumns = COLUMNS.filter(column =>
-    (column.key !== 'priority' || showQueueColumn) && (column.key !== 'size' || showSizeColumn)
-  );
+  const optionalColumns = {
+    priority: showQueueColumn,
+    size: Boolean(settings.ui_show_size_column),
+    seeds: Boolean(settings.ui_show_seeds_column),
+  };
+  const tableColumns = COLUMNS.filter(column => optionalColumns[column.key] !== false);
   const sortIsVisible = columnSortKeys(tableColumns).includes(sort.key);
   const maxQueuePriority = useMemo(
     () => torrents.reduce(

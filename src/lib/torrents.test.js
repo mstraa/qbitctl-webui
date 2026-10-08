@@ -177,3 +177,9 @@ test('isActive requires transfer in either direction', () => {
   expect(isActive({ dlspeed: 0, upspeed: 0 })).toBe(false);
   expect(isActive({})).toBe(false);
 });
+
+test('compareTorrents sorts seeds by swarm seeds, falling back to connected seeds', () => {
+  const rows = [{ num_complete: 5 }, { num_seeds: 12 }, { num_complete: 0, num_seeds: 40 }];
+  const sorted = rows.slice().sort((l, r) => compareTorrents(l, r, { key: 'seeds', direction: 'desc' }));
+  expect(sorted).toEqual([{ num_seeds: 12 }, { num_complete: 5 }, { num_complete: 0, num_seeds: 40 }]);
+});
